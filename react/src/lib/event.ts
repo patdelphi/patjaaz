@@ -52,6 +52,10 @@ export type TEvents = {
   // ********** Material events - Start **********
   'Material::AddImagesToChat': TMaterialAddImagesToChatEvent
   // ********** Material events - End **********
+
+  // ********** Auth events - Start **********
+  'Auth::Unauthorized': { url: string; status: number }
+  // ********** Auth events - End **********
 }
 
 export const eventBus = mitt<TEvents>()

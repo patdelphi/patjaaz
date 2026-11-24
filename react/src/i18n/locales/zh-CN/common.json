@@ -64,6 +64,8 @@
     "code": "访问码",
     "submit": "登录",
     "invalid": "访问码不正确。",
+    "rateLimited": "错误尝试次数过多，请 15 分钟后再试。",
+    "sessionExpired": "登录状态已失效，请重新输入访问码。",
     "unavailable": "无法连接 Jaaz 服务。",
     "retry": "重试"
   },

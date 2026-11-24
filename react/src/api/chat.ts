@@ -1,8 +1,9 @@
+import { apiFetch } from '@/lib/apiFetch'
 import { Message, Model } from '@/types/types'
 import { ModelInfo, ToolInfo } from './model'
 
 export const getChatSession = async (sessionId: string) => {
-  const response = await fetch(`/api/chat_session/${sessionId}`)
+  const response = await apiFetch(`/api/chat_session/${sessionId}`)
   const data = await response.json()
   return data as Message[]
 }
@@ -15,7 +16,7 @@ export const sendMessages = async (payload: {
   toolList: ToolInfo[]
   systemPrompt: string | null
 }) => {
-  const response = await fetch(`/api/chat`, {
+  const response = await apiFetch(`/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

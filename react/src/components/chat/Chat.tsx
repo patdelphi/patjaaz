@@ -169,21 +169,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return
       }
 
-      const existToolCall = messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          m.tool_calls &&
-          m.tool_calls.find((t) => t.id == data.id)
-      )
-
-      if (existToolCall) {
-        return
-      }
-
+      // 将去重校验放入 reducer 内以基于最新消息快照判断，同时避免在 produce 内产生副作用
+      setPending('tool')
       setMessages(
         produce((prev) => {
+          const existToolCall = prev.some(
+            (m) =>
+              m.role === 'assistant' &&
+              m.tool_calls &&
+              m.tool_calls.some((t) => t.id == data.id)
+          )
+          if (existToolCall) {
+            return
+          }
           console.log('👇tool_call event get', data)
-          setPending('tool')
           prev.push({
             role: 'assistant',
             content: '',
@@ -203,7 +202,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       setExpandingToolCalls(
         produce((prev) => {
-          prev.push(data.id)
+          if (!prev.includes(data.id)) {
+            prev.push(data.id)
+          }
         })
       )
     },
@@ -216,21 +217,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return
       }
 
-      const existToolCall = messages.find(
-        (m) =>
-          m.role === 'assistant' &&
-          m.tool_calls &&
-          m.tool_calls.find((t) => t.id == data.id)
-      )
-
-      if (existToolCall) {
-        return
-      }
-
+      setPending('tool')
       setMessages(
         produce((prev) => {
+          const existToolCall = prev.some(
+            (m) =>
+              m.role === 'assistant' &&
+              m.tool_calls &&
+              m.tool_calls.some((t) => t.id == data.id)
+          )
+          if (existToolCall) {
+            return
+          }
           console.log('👇tool_call_pending_confirmation event get', data)
-          setPending('tool')
           prev.push({
             role: 'assistant',
             content: '',
@@ -250,7 +249,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       setPendingToolConfirmations(
         produce((prev) => {
-          prev.push(data.id)
+          if (!prev.includes(data.id)) {
+            prev.push(data.id)
+          }
         })
       )
 
@@ -326,9 +327,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return
       }
 
+      setPending('tool')
       setMessages(
         produce((prev) => {
-          setPending('tool')
           const lastMessage = prev.find(
             (m) =>
               m.role === 'assistant' &&
@@ -480,6 +481,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     })
   }, [])
 
+  // 使用 ref 持有最新事件处理器，确保 12 个 eventBus 监听在挂载期间只绑定和清理一次
+  const handlersRef = useRef({
+    handleDelta,
+    handleToolCall,
+    handleToolCallPendingConfirmation,
+    handleToolCallConfirmed,
+    handleToolCallCancelled,
+    handleToolCallArguments,
+    handleToolCallResult,
+    handleImageGenerated,
+    handleAllMessages,
+    handleDone,
+    handleError,
+    handleInfo,
+  })
+  handlersRef.current = {
+    handleDelta,
+    handleToolCall,
+    handleToolCallPendingConfirmation,
+    handleToolCallConfirmed,
+    handleToolCallCancelled,
+    handleToolCallArguments,
+    handleToolCallResult,
+    handleImageGenerated,
+    handleAllMessages,
+    handleDone,
+    handleError,
+    handleInfo,
+  }
+
   useEffect(() => {
     const handleScroll = () => {
       if (scrollRef.current) {
@@ -491,50 +522,55 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const scrollEl = scrollRef.current
     scrollEl?.addEventListener('scroll', handleScroll)
 
-    eventBus.on('Socket::Session::Delta', handleDelta)
-    eventBus.on('Socket::Session::ToolCall', handleToolCall)
-    eventBus.on(
-      'Socket::Session::ToolCallPendingConfirmation',
-      handleToolCallPendingConfirmation
-    )
-    eventBus.on('Socket::Session::ToolCallConfirmed', handleToolCallConfirmed)
-    eventBus.on('Socket::Session::ToolCallCancelled', handleToolCallCancelled)
-    eventBus.on('Socket::Session::ToolCallArguments', handleToolCallArguments)
-    eventBus.on('Socket::Session::ToolCallResult', handleToolCallResult)
-    eventBus.on('Socket::Session::ImageGenerated', handleImageGenerated)
-    eventBus.on('Socket::Session::AllMessages', handleAllMessages)
-    eventBus.on('Socket::Session::Done', handleDone)
-    eventBus.on('Socket::Session::Error', handleError)
-    eventBus.on('Socket::Session::Info', handleInfo)
+    const onDelta = (d: TEvents['Socket::Session::Delta']) => handlersRef.current.handleDelta(d)
+    const onToolCall = (d: TEvents['Socket::Session::ToolCall']) => handlersRef.current.handleToolCall(d)
+    const onToolCallPendingConfirmation = (d: TEvents['Socket::Session::ToolCallPendingConfirmation']) =>
+      handlersRef.current.handleToolCallPendingConfirmation(d)
+    const onToolCallConfirmed = (d: TEvents['Socket::Session::ToolCallConfirmed']) =>
+      handlersRef.current.handleToolCallConfirmed(d)
+    const onToolCallCancelled = (d: TEvents['Socket::Session::ToolCallCancelled']) =>
+      handlersRef.current.handleToolCallCancelled(d)
+    const onToolCallArguments = (d: TEvents['Socket::Session::ToolCallArguments']) =>
+      handlersRef.current.handleToolCallArguments(d)
+    const onToolCallResult = (d: TEvents['Socket::Session::ToolCallResult']) =>
+      handlersRef.current.handleToolCallResult(d)
+    const onImageGenerated = (d: TEvents['Socket::Session::ImageGenerated']) =>
+      handlersRef.current.handleImageGenerated(d)
+    const onAllMessages = (d: TEvents['Socket::Session::AllMessages']) =>
+      handlersRef.current.handleAllMessages(d)
+    const onDone = (d: TEvents['Socket::Session::Done']) => handlersRef.current.handleDone(d)
+    const onError = (d: TEvents['Socket::Session::Error']) => handlersRef.current.handleError(d)
+    const onInfo = (d: TEvents['Socket::Session::Info']) => handlersRef.current.handleInfo(d)
+
+    eventBus.on('Socket::Session::Delta', onDelta)
+    eventBus.on('Socket::Session::ToolCall', onToolCall)
+    eventBus.on('Socket::Session::ToolCallPendingConfirmation', onToolCallPendingConfirmation)
+    eventBus.on('Socket::Session::ToolCallConfirmed', onToolCallConfirmed)
+    eventBus.on('Socket::Session::ToolCallCancelled', onToolCallCancelled)
+    eventBus.on('Socket::Session::ToolCallArguments', onToolCallArguments)
+    eventBus.on('Socket::Session::ToolCallResult', onToolCallResult)
+    eventBus.on('Socket::Session::ImageGenerated', onImageGenerated)
+    eventBus.on('Socket::Session::AllMessages', onAllMessages)
+    eventBus.on('Socket::Session::Done', onDone)
+    eventBus.on('Socket::Session::Error', onError)
+    eventBus.on('Socket::Session::Info', onInfo)
     return () => {
       scrollEl?.removeEventListener('scroll', handleScroll)
 
-      eventBus.off('Socket::Session::Delta', handleDelta)
-      eventBus.off('Socket::Session::ToolCall', handleToolCall)
-      eventBus.off(
-        'Socket::Session::ToolCallPendingConfirmation',
-        handleToolCallPendingConfirmation
-      )
-      eventBus.off(
-        'Socket::Session::ToolCallConfirmed',
-        handleToolCallConfirmed
-      )
-      eventBus.off(
-        'Socket::Session::ToolCallCancelled',
-        handleToolCallCancelled
-      )
-      eventBus.off(
-        'Socket::Session::ToolCallArguments',
-        handleToolCallArguments
-      )
-      eventBus.off('Socket::Session::ToolCallResult', handleToolCallResult)
-      eventBus.off('Socket::Session::ImageGenerated', handleImageGenerated)
-      eventBus.off('Socket::Session::AllMessages', handleAllMessages)
-      eventBus.off('Socket::Session::Done', handleDone)
-      eventBus.off('Socket::Session::Error', handleError)
-      eventBus.off('Socket::Session::Info', handleInfo)
+      eventBus.off('Socket::Session::Delta', onDelta)
+      eventBus.off('Socket::Session::ToolCall', onToolCall)
+      eventBus.off('Socket::Session::ToolCallPendingConfirmation', onToolCallPendingConfirmation)
+      eventBus.off('Socket::Session::ToolCallConfirmed', onToolCallConfirmed)
+      eventBus.off('Socket::Session::ToolCallCancelled', onToolCallCancelled)
+      eventBus.off('Socket::Session::ToolCallArguments', onToolCallArguments)
+      eventBus.off('Socket::Session::ToolCallResult', onToolCallResult)
+      eventBus.off('Socket::Session::ImageGenerated', onImageGenerated)
+      eventBus.off('Socket::Session::AllMessages', onAllMessages)
+      eventBus.off('Socket::Session::Done', onDone)
+      eventBus.off('Socket::Session::Error', onError)
+      eventBus.off('Socket::Session::Info', onInfo)
     }
-  })
+  }, [])
 
   const initChat = useCallback(async () => {
     if (!sessionId) {

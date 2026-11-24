@@ -8,6 +8,44 @@ from typing import Dict, TypedDict, Literal, Optional
 # 定义配置文件的类型结构
 
 
+def mask_secret(value: str) -> str:
+    """对密钥做掩码展示，不向前端返回明文 api_key。"""
+    if not isinstance(value, str) or not value:
+        return ""
+    if len(value) > 8:
+        return f"{value[:3]}****{value[-4:]}"
+    return "********"
+
+
+def is_masked_secret(value: str) -> bool:
+    """判断传入字符串是否为掩码占位符。"""
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    return bool(stripped) and ("****" in stripped or stripped == "********")
+
+
+def merge_masked_secrets(incoming: "AppConfig", existing: "AppConfig") -> "AppConfig":
+    """保存配置时，若 api_key 仍为掩码占位符则保留原有明文密钥。"""
+    merged = copy.deepcopy(incoming)
+    if not isinstance(merged, dict):
+        return merged
+
+    for provider, provider_config in merged.items():
+        if not isinstance(provider_config, dict) or "api_key" not in provider_config:
+            continue
+        raw_key = provider_config.get("api_key", "")
+        if is_masked_secret(raw_key):
+            existing_provider = existing.get(provider, {}) if isinstance(existing, dict) else {}
+            existing_key = (
+                existing_provider.get("api_key", "")
+                if isinstance(existing_provider, dict)
+                else ""
+            )
+            provider_config["api_key"] = existing_key
+    return merged
+
+
 class ModelConfig(TypedDict, total=False):
     type: Literal["text", "image", "video"]
     is_custom: Optional[bool]
@@ -126,8 +164,9 @@ class ConfigService:
                     provider_config['is_custom'] = True
                 self.app_config[provider] = provider_config
                 # image/video models are hardcoded in the default provider config
-                provider_models = DEFAULT_PROVIDERS_CONFIG.get(
-                    provider, {}).get('models', {})
+                provider_models = copy.deepcopy(
+                    DEFAULT_PROVIDERS_CONFIG.get(provider, {}).get('models', {})
+                )
                 for model_name, model_config in provider_config.get('models', {}).items():
                     # Only text model can be self added
                     if model_config.get('type') == 'text' and model_name not in provider_models:
@@ -149,15 +188,26 @@ class ConfigService:
             self.app_config['jaaz']['url'] = self._get_jaaz_url()
         return self.app_config
 
+    def get_masked_config(self) -> AppConfig:
+        """返回供接口响应使用的配置副本，所有 api_key 均已掩码。"""
+        masked = copy.deepcopy(self.get_config())
+        for provider_config in masked.values():
+            if isinstance(provider_config, dict) and 'api_key' in provider_config:
+                provider_config['api_key'] = mask_secret(
+                    provider_config.get('api_key', '')
+                )
+        return masked
+
     async def update_config(self, data: AppConfig) -> Dict[str, str]:
         try:
-            if 'jaaz' in data:
-                data['jaaz']['url'] = self._get_jaaz_url()
+            sanitized = merge_masked_secrets(data, self.app_config)
+            if 'jaaz' in sanitized and isinstance(sanitized['jaaz'], dict):
+                sanitized['jaaz']['url'] = self._get_jaaz_url()
 
             os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
-            with open(self.config_file, "w") as f:
-                toml.dump(data, f)
-            self.app_config = data
+            with open(self.config_file, "w", encoding="utf-8") as f:
+                toml.dump(sanitized, f)
+            self.app_config = sanitized
 
             return {
                 "status": "success",

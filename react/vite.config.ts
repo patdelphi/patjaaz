@@ -90,6 +90,12 @@ export default defineConfig(({ mode }) => {
         // Uncomment the following if you want to remove the /api prefix when forwarding to Flask
         // rewrite: (path) => path.replace(/^\/api/, '')
       },
+      // 代理 Socket.IO WebSocket 与长轮询连接，开发模式走同源代理避免跨域 Cookie 失效
+      '/socket.io': {
+        target: `http://127.0.0.1:${PORT}`,
+        ws: true,
+        changeOrigin: true,
+      },
       // Also proxy WebSocket connections
       '/ws': {
         target: `ws://127.0.0.1:${PORT}`,

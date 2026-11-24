@@ -9,6 +9,15 @@ const { spawn, fork } = require('child_process')
 let installationWorker = null
 let installationPromise = null
 
+// 通过结构化 IPC 发送窗口事件，避免字符串拼接 executeJavaScript 引发注入或反斜杠报错。
+function emitWindowEvent(mainWindow, eventName, detail) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('jaaz-window-event', {
+    event: eventName,
+    detail,
+  })
+}
+
 module.exports = {
   // 处理打开浏览器的请求
   'open-browser-url': async (event, url) => {
@@ -72,38 +81,22 @@ module.exports = {
           const mainWindow = BrowserWindow.getAllWindows()[0]
           if (mainWindow) {
             if (message.type === 'progress') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-install-progress', {
-                  detail: { percent: ${message.percent}, status: "${(
-                message.status || ''
-              ).replace(/"/g, '\\"')}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-install-progress', {
+                percent: message.percent,
+                status: message.status || '',
+              })
             } else if (message.type === 'log') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-install-log', {
-                  detail: { message: "${(message.message || '').replace(
-                    /"/g,
-                    '\\"'
-                  )}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-install-log', {
+                message: message.message || '',
+              })
             } else if (message.type === 'error') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-install-error', {
-                  detail: { error: "${(
-                    message.error || 'Unknown error occurred'
-                  ).replace(/"/g, '\\"')}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-install-error', {
+                error: message.error || 'Unknown error occurred',
+              })
             } else if (message.type === 'cancelled') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-install-cancelled', {
-                  detail: { message: "${(
-                    message.message || 'Installation cancelled'
-                  ).replace(/"/g, '\\"')}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-install-cancelled', {
+                message: message.message || 'Installation cancelled',
+              })
             }
           }
 
@@ -274,30 +267,18 @@ module.exports = {
           const mainWindow = BrowserWindow.getAllWindows()[0]
           if (mainWindow) {
             if (message.type === 'progress') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-uninstall-progress', {
-                  detail: { percent: ${message.percent}, status: "${(
-                message.status || ''
-              ).replace(/"/g, '\\"')}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-uninstall-progress', {
+                percent: message.percent,
+                status: message.status || '',
+              })
             } else if (message.type === 'log') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-uninstall-log', {
-                  detail: { message: "${(message.message || '').replace(
-                    /"/g,
-                    '\\"'
-                  )}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-uninstall-log', {
+                message: message.message || '',
+              })
             } else if (message.type === 'error') {
-              mainWindow.webContents.executeJavaScript(`
-                window.dispatchEvent(new CustomEvent('comfyui-uninstall-error', {
-                  detail: { error: "${(
-                    message.error || 'Unknown error occurred'
-                  ).replace(/"/g, '\\"')}" }
-                }));
-              `)
+              emitWindowEvent(mainWindow, 'comfyui-uninstall-error', {
+                error: message.error || 'Unknown error occurred',
+              })
             }
           }
 

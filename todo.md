@@ -192,7 +192,7 @@
 - 开发模式检测到 `server/.venv` 时优先使用其中的 Python；当前环境的虚拟环境路径存在。
 - `node --check electron/main.js` 通过；当前服务的鉴权状态接口返回启用，已确认新识别条件匹配。
 - 修改后再次运行标准 `npm run test:run`：11 个 React 测试文件、36 项全部通过；前后端仍在运行且 HTTP 200。
-## M0 加固 + M1 画布快速改进（2026-11-24 规划，待确认后执行）
+## M0 加固 + M1 画布快速改进（2026-11-24 已完成代码与自动测试）
 
 依据：`Docs/04-Jaaz AIGC无限画布深度分析与规划.md` 第 3、4、7.4、9 节及 `Docs/06-Jaaz AIGC无限画布详细技术设计.md`。本轮不做去云端清理、ComfyUI 能力层和 pi Agent（分别属于 M1 主体与 M2）。
 
@@ -206,55 +206,55 @@
 
 ### 阶段
 
-1. [ ] 安全 P0
-   - [ ] 新增 `safe_join()`，`workspace.py` 的读/写/建/改名/删除全部限定在工作区根目录；`delete_file` 不再接受绝对路径。
-   - [ ] 本机文件浏览类接口（`browse_filesystem`、`serve_file`、`get_media_files`、`get_file_info`、`open_folder_in_explorer`）增加允许根目录配置，默认用户目录与 ComfyUI output。
-   - [ ] `/api/file/{file_id}` 校验文件名格式并检查 realpath 位于 `FILES_DIR`。
-   - [ ] `comfy_dynamic.py` 读取输入图片/媒体文件改用 `safe_join(FILES_DIR, filename)` 校验，缺失或非法直接报错，禁止静默放行。
-   - [ ] `comfyui/proxy`、`comfyui/object_info` 只使用配置中的 ComfyUI 地址，忽略前端传入的 URL。
-   - [ ] `GET /api/config` 对 API Key 做掩码返回；保存配置时保留未改动的掩码占位符不覆盖原密钥。
-   - [ ] `validateEmbeddable` 只放行 `/api/file/` 同源地址。
-   - [ ] 上传接口限制字节数、`Image.MAX_IMAGE_PIXELS`、MIME 白名单。
-   - [ ] Socket.IO `cors_allowed_origins` 限定为前端源。
-   - [ ] Electron 移除指向上游的 `autoUpdater` 逻辑，恢复 `webSecurity: true`（移除 `allowRunningInsecureContent`）；`ipcHandlers.js` 安装/卸载事件从字符串拼接 `executeJavaScript` 改为 `webContents.send`。
-2. [ ] 数据一致性
-   - [ ] 图片、视频与 `comfy_dynamic.py` 写画布共用同一个 `canvas_lock_manager`。
-   - [ ] `save_canvas_data` 未传缩略图时保留原值。
-   - [ ] `/api/canvas/create` 先插入画布再启动聊天任务。
-   - [ ] 删除画布时在同一事务内删除会话与消息（文件暂不删）。
-   - [ ] SQLite 开启 WAL 与 `foreign_keys=ON`（`busy_timeout=5000`）；多步写入使用事务。
-   - [ ] `done` 事件只由 `chat_service` 发送一次。
-3. [ ] 已知 bug
-   - [ ] 修复 `/api/list_chat_sessions` 缺参数。
-   - [ ] `list_tools` 对缺失 provider 配置使用 `.get()`。
-   - [ ] 工具返回值、上传接口的图片链接改为相对路径 `/api/file/...`。
-   - [ ] 修复 `comfyui_execution.py` 健壮性：用业务异常替代 `typer.Exit(code=1)`；`queue()`/`upload_image()` 补 `raise_for_status()`；`watch_execution()` 加超时并在 `finally` 关闭 WS（断线降级轮询 `/history`）；修复 `on_status` 过滤/`KeyError`/`None`；`get_node_title()` 用 `.get()` 兼容动态子图节点；输出提取覆盖 `images`/`gifs`/`videos`/`audio`。
-   - [ ] 修复 `comfy_dynamic.py` 无条件覆写用户显式传入 `seed` 的问题，并补充识别 `noise_seed`。
-   - [ ] 修复 `tool_confirmation.py`、`workspace.py`、`settings.py` 中 `except Exception` 吞掉内部 `HTTPException` 变成 500 的问题。
-   - [ ] `vite.config.ts` 增加 `/socket.io` WebSocket 代理；修复 `SocketProvider` 开发模式写死 `localhost:57988` 及在异步函数内返回清理函数的问题。
-   - [ ] `pop-bar/index.tsx`、`CanvasToolMenu.tsx`、`CanvasViewMenu.tsx` 的 `onChange` 订阅移入 `useEffect` 并在清理时注销。
-   - [ ] `Chat.tsx` 事件订阅只绑定一次（ref 保存最新回调）；去重逻辑移入 reducer，`setPending` 移出 `produce`。
-   - [ ] 抽取统一场景修改 helper `mutateSceneElements`（自动递增 `version`、`versionNonce`、`updated`），同步修复 `CanvasTextBackground.tsx`。
-   - [ ] 画布加载失败显示错误与重试按钮。
-4. [ ] 鉴权补强
-   - [ ] 登录失败按来源计数，5 次失败锁定 15 分钟；`X-Forwarded-For` 仅在请求来自本机代理时采信。
-   - [ ] 启动时访问码少于 16 个字符拒绝启动并提示。
-   - [ ] 会话改为 HMAC 签名令牌（secret 由访问码 + `user_data` 随机盐派生），后端重启不掉线，更换访问码后旧会话失效。
-   - [ ] 记录 Socket `sid → 会话`；登出时断开对应连接，定时断开过期连接。
-   - [ ] 前端封装统一请求函数，收到 401 时切回 AuthGate。
-   - [ ] 页面响应增加 `X-Frame-Options: DENY` 与基础 CSP。
-5. [ ] 画布快速改进
-   - [ ] E2：选中箭头/线条/形状时浮动条提供线宽档位 1、2、4、6、8、12、16、24 与自定义输入，经 `mutateSceneElements` 写入。
-   - [ ] E1①：整合为统一补丁脚本 `react/scripts/patch-excalidraw.mjs`，同步修补 `getArrowheadPoints`（箭头头部等比缩放 + 开放箭头半角微调）、`getCanvasPadding`（防 `20px` 离屏裁剪）与 `getDashArrayDashed`/`getDashArrayDotted`（粗虚线缩放）；画布与 SVG 导出一致。
-   - [ ] E1②：块箭头工具（直箭头、双向、弯箭头等），闭合 `line` 多边形（`roundness: null`、`roughness: 0`）+ `customData.kind = 'block-arrow'`，可改填充色、描边、头宽、尾宽，缩放时按参数重算顶点。
-   - [ ] E3：工具栏增加菱形、Frame、橡皮擦、激光笔、块箭头，按组折叠。
-   - [ ] E4：底部栏提供撤销、重做、缩放百分比、适配画布。
-   - [ ] E14：能用 `UIOptions` 关闭的原生界面改为配置关闭，其余隐藏规则集中到一个样式块并注明原因。
-6. [ ] 验证与收尾：检查 diff；更新 `Docs/` 规划文档状态；不提交、不推送。
+1. [x] 安全 P0
+   - [x] 新增 `safe_join()`，`workspace.py` 的读/写/建/改名/删除全部限定在工作区根目录；`delete_file` 不再接受绝对路径。
+   - [x] 本机文件浏览类接口（`browse_filesystem`、`serve_file`、`get_media_files`、`get_file_info`、`open_folder_in_explorer`）增加允许根目录配置，默认用户目录与 ComfyUI output。
+   - [x] `/api/file/{file_id}` 校验文件名格式并检查 realpath 位于 `FILES_DIR`。
+   - [x] `comfy_dynamic.py` 读取输入图片/媒体文件改用 `safe_join(FILES_DIR, filename)` 校验，缺失或非法直接报错，禁止静默放行。
+   - [x] `comfyui/proxy`、`comfyui/object_info` 只使用配置中的 ComfyUI 地址，忽略前端传入的 URL。
+   - [x] `GET /api/config` 对 API Key 做掩码返回；保存配置时保留未改动的掩码占位符不覆盖原密钥。
+   - [x] `validateEmbeddable` 只放行 `/api/file/` 同源地址。
+   - [x] 上传接口限制字节数、`Image.MAX_IMAGE_PIXELS`、MIME 白名单。
+   - [x] Socket.IO `cors_allowed_origins` 限定为前端源。
+   - [x] Electron 移除指向上游的 `autoUpdater` 逻辑，恢复 `webSecurity: true`（移除 `allowRunningInsecureContent`）；`ipcHandlers.js` 安装/卸载事件从字符串拼接 `executeJavaScript` 改为 `webContents.send`。
+2. [x] 数据一致性
+   - [x] 图片、视频与 `comfy_dynamic.py` 写画布共用同一个 `canvas_lock_manager`。
+   - [x] `save_canvas_data` 未传缩略图时保留原值。
+   - [x] `/api/canvas/create` 先插入画布再启动聊天任务。
+   - [x] 删除画布时在同一事务内删除会话与消息（文件暂不删）。
+   - [x] SQLite 开启 WAL 与 `foreign_keys=ON`（`busy_timeout=5000`）；多步写入使用事务。
+   - [x] `done` 事件只由 `chat_service` 发送一次。
+3. [x] 已知 bug
+   - [x] 修复 `/api/list_chat_sessions` 缺参数。
+   - [x] `list_tools` 对缺失 provider 配置使用 `.get()`。
+   - [x] 工具返回值、上传接口的图片链接改为相对路径 `/api/file/...`。
+   - [x] 修复 `comfyui_execution.py` 健壮性：用业务异常替代 `typer.Exit(code=1)`；`queue()`/`upload_image()` 补 `raise_for_status()`；`watch_execution()` 加超时并在 `finally` 关闭 WS（断线降级轮询 `/history`）；修复 `on_status` 过滤/`KeyError`/`None`；`get_node_title()` 用 `.get()` 兼容动态子图节点；输出提取覆盖 `images`/`gifs`/`videos`/`audio`。
+   - [x] 修复 `comfy_dynamic.py` 无条件覆写用户显式传入 `seed` 的问题，并补充识别 `noise_seed`。
+   - [x] 修复 `tool_confirmation.py`、`workspace.py`、`settings.py` 中 `except Exception` 吞掉内部 `HTTPException` 变成 500 的问题。
+   - [x] `vite.config.ts` 增加 `/socket.io` WebSocket 代理；修复 `SocketProvider` 开发模式写死 `localhost:57988` 及在异步函数内返回清理函数的问题。
+   - [x] `pop-bar/index.tsx`、`CanvasToolMenu.tsx`、`CanvasViewMenu.tsx` 的 `onChange` 订阅移入 `useEffect` 并在清理时注销。
+   - [x] `Chat.tsx` 事件订阅只绑定一次（ref 保存最新回调）；去重逻辑移入 reducer，`setPending` 移出 `produce`。
+   - [x] 抽取统一场景修改 helper `mutateSceneElements`（自动递增 `version`、`versionNonce`、`updated`），同步修复 `CanvasTextBackground.tsx`。
+   - [x] 画布加载失败显示错误与重试按钮。
+4. [x] 鉴权补强
+   - [x] 登录失败按来源计数，5 次失败锁定 15 分钟；`X-Forwarded-For` 仅在请求来自本机代理时采信。
+   - [x] 启动时访问码少于 16 个字符拒绝启动并提示。
+   - [x] 会话改为 HMAC 签名令牌（secret 由访问码 + `user_data` 随机盐派生），后端重启不掉线，更换访问码后旧会话失效。
+   - [x] 记录 Socket `sid → 会话`；登出时断开对应连接，定时断开过期连接。
+   - [x] 前端封装统一请求函数，收到 401 时切回 AuthGate。
+   - [x] 页面响应增加 `X-Frame-Options: DENY` 与基础 CSP。
+5. [x] 画布快速改进
+   - [x] E2：选中箭头/线条/形状时浮动条提供线宽档位 1、2、4、6、8、12、16、24 与自定义输入，经 `mutateSceneElements` 写入。
+   - [x] E1①：整合为统一补丁脚本 `react/scripts/patch-excalidraw.mjs`，同步修补 `getArrowheadPoints`（箭头头部等比缩放 + 开放箭头半角微调）、`getCanvasPadding`（防 `20px` 离屏裁剪）与 `getDashArrayDashed`/`getDashArrayDotted`（粗虚线缩放）；画布与 SVG 导出一致。
+   - [x] E1②：块箭头工具（直箭头、双向、弯箭头等），闭合 `line` 多边形（`roundness: null`、`roughness: 0`）+ `customData.kind = 'block-arrow'`，可改填充色、描边、头宽、尾宽，缩放时按参数重算顶点。
+   - [x] E3：工具栏增加菱形、Frame、橡皮擦、激光笔、块箭头，按组折叠。
+   - [x] E4：底部栏提供撤销、重做、缩放百分比、适配画布。
+   - [x] E14：能用 `UIOptions` 关闭的原生界面改为配置关闭，其余隐藏规则集中到一个样式块并注明原因。
+6. [x] 验证与收尾：检查 diff；更新 `Docs/` 规划文档状态；不提交、不推送。
 
 ### 完成标准
 
-- 后端测试（`server/.venv/Scripts/python.exe -m unittest discover -s tests -v`，注明当前 `server/.venv` 未装 `pytest`，且 `IsolatedAsyncioTestCase` 需本机 loopback socket）新增并通过：`safe_join` 穿越用例、`comfy_dynamic` 路径校验与种子保留、`/api/file` 非法文件名、ComfyUI 代理拒绝外部 URL、`GET /api/config` Key 掩码、路由 404 不被吞成 500、上传超限、缩略图保留、删除级联、登录限流、签名令牌过期与换码失效。
+- 后端测试（`server/.venv/Scripts/python.exe -X dev -m unittest discover -s tests -v`，注明当前 `server/.venv` 未装 `pytest`）覆盖全量同步与 `IsolatedAsyncioTestCase` 异步用例：`safe_join` 穿越用例、`comfy_dynamic` 路径校验与种子保留、`/api/file` 非法文件名、ComfyUI 代理拒绝外部 URL、`GET /api/config` Key 掩码、路由 404 不被吞成 500、上传超限、缩略图保留、删除级联、画布锁串行、登录限流、签名令牌过期与换码失效、登出/过期 Socket 断连。
 - 前端测试（Windows PowerShell 下用 `npm.cmd run test:run`）新增并通过：`onChange` 订阅清理、`mutateSceneElements` 版本号递增、箭头尺寸缩放与 padding 计算、块箭头顶点生成、401 处理；`react` 下 `npm.cmd run build` 通过。
 - 补丁脚本 `patch-excalidraw.mjs` 锚点找不到或版本不匹配时让安装直接报错，并有 Vitest 单测覆盖。
 - 手工验证：生成图片期间连续编辑画布 10 次无元素丢失；首页缩略图在工具写入后仍存在；线宽 16 的箭头头部等比放大且四边不被裁剪、虚线不粘连；块箭头可拉伸并导出 PNG/SVG；界面可撤销/重做；错误访问码 5 次后被锁；后端重启后已登录浏览器无需重新登录。
@@ -265,3 +265,15 @@
 - Agent 引擎采用 earendil-works/pi，新增 Node Agent 服务（M2 实施）。
 - Agent 服务目录为仓库根目录 `agent/`，与前端共享 `packages/shared`（事件与工具 schema）。
 - 画布继续使用 Excalidraw，按 7.4 与 `Docs/06-Jaaz AIGC无限画布详细技术设计.md` 第 4 节增强。
+
+### 执行结果与未执行项（2026-11-24）
+
+- 自动化验证通过：
+  - Python 语法检查（`py_compile` 全部 25 个受影响后端模块）：退出码 0。
+  - 后端全量测试（`server/.venv/Scripts/python.exe -X dev -m unittest discover -s tests -v`）：共 9 个测试文件、48 个同步与 `IsolatedAsyncioTestCase` 异步用例全部通过（1.097s，含原有 3 个异步历史测试与阶段 2–4 新增的 11 个异步运行时测试）。
+  - Electron 语法检查（`node --check electron/main.js electron/ipcHandlers.js electron/preload.js`）及 Excalidraw 0.18.1 补丁脚本 `react/scripts/patch-excalidraw.mjs` 幂等执行通过。
+  - 前端单元测试（`npm.cmd run test:run`）：17 个测试文件、49 个用例全部通过。
+  - 前端类型与构建（`react` 下 `npm.cmd run build`，`tsc -b && vite build`）：成功（17.91s），`git diff --check` 退出码 0。
+- 未执行项：
+  - 浏览器与真实 ComfyUI 运行态手工验证：并发编辑不丢失元素、线宽 16 箭头视觉与 PNG/SVG 导出不裁剪、块箭头交互拉伸、错误访问码 5 次锁定、重启后免重登待人工交互验证。
+  - 本轮 M0 + M1 代码改动保留在工作区，尚未执行 `git add` / `git commit` / `git push`。

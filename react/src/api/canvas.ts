@@ -1,5 +1,6 @@
 import { CanvasData, Message, Session } from '@/types/types'
 import { ToolInfo } from '@/api/model'
+import { apiFetch } from '@/lib/apiFetch'
 import { waitForPendingCanvasSaves } from '@/lib/canvasSaveQueue'
 
 export type ListCanvasesResponse = {
@@ -41,7 +42,15 @@ export async function getCanvas(
   id: string
 ): Promise<{ data: CanvasData; name: string; sessions: Session[] }> {
   await waitForPendingCanvasSaves(id)
-  const response = await fetch(`/api/canvas/${id}`)
+  const response = await apiFetch(`/api/canvas/${id}`)
+  if (!response.ok) {
+    const errorPayload = await response.json().catch(() => null)
+    const detail =
+      typeof errorPayload?.detail === 'string'
+        ? errorPayload.detail
+        : response.statusText || `HTTP ${response.status}`
+    throw new Error(`Failed to load canvas (${response.status}): ${detail}`)
+  }
   return await response.json()
 }
 

@@ -58,6 +58,8 @@
     "code": "Access code",
     "submit": "Sign in",
     "invalid": "The access code is incorrect.",
+    "rateLimited": "Too many failed attempts. Please try again in 15 minutes.",
+    "sessionExpired": "Your session has expired. Please enter the access code again.",
     "unavailable": "Cannot connect to the Jaaz service.",
     "retry": "Retry"
   },

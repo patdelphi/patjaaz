@@ -1,58 +1,85 @@
-from typing import Optional
+"""程序说明：提供 ComfyUI 基础生成、工作流运行及输出媒体类型识别与落盘工具。"""
+import copy
+import json
+import mimetypes
 import os
 import random
-import json
 import sys
-import copy
 import traceback
-from utils.http_client import HttpClient
-from .image_utils import get_image_info_and_save, generate_image_id
+from typing import Optional
+
+import aiofiles
+
+from routers.comfyui_execution import execute
 from services.config_service import (
-    config_service,
     FILES_DIR,
     IMAGE_FORMATS,
     VIDEO_FORMATS,
+    config_service,
 )
-from routers.comfyui_execution import execute
 from tools.video_generation.video_canvas_utils import get_video_info_and_save
+from utils.http_client import HttpClient
+from .image_utils import generate_image_id, get_image_info_and_save
+
+AUDIO_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac")
 
 
-async def detect_file_type_comprehensive(url):
-    """综合判断文件类型"""
+async def detect_file_type_comprehensive(url: str) -> str:
+    """综合通过 Content-Type 与扩展名判断 ComfyUI 输出媒体类型（image/video/audio）。"""
+    lower_url = url.lower()
     try:
-        # 首先尝试通过HTTP头部判断
         async with HttpClient.create() as client:
             response = await client.head(url)
             content_type = response.headers.get("content-type", "").lower()
 
             if content_type.startswith("image/"):
                 return "image"
-            elif content_type.startswith("video/"):
+            if content_type.startswith("video/"):
                 return "video"
+            if content_type.startswith("audio/"):
+                return "audio"
 
-        # 如果Content-Type不明确，检查URL扩展名
-        if any(fmt in url.lower() for fmt in IMAGE_FORMATS):
+        if any(fmt in lower_url for fmt in IMAGE_FORMATS):
             return "image"
-        elif any(fmt in url.lower() for fmt in VIDEO_FORMATS):
+        if any(fmt in lower_url for fmt in VIDEO_FORMATS):
             return "video"
+        if any(fmt in lower_url for fmt in AUDIO_FORMATS):
+            return "audio"
 
-        # 默认返回image
         return "image"
-
     except Exception:
-        # 出错时回退到扩展名检查
-        return "image" if any(fmt in url.lower() for fmt in IMAGE_FORMATS) else "video"
+        if any(fmt in lower_url for fmt in AUDIO_FORMATS):
+            return "audio"
+        return "image" if any(fmt in lower_url for fmt in IMAGE_FORMATS) else "video"
 
 
-def get_asset_path(filename):
-    """
-    To get the correct path for pyinstaller bundled application
-    """
+async def get_audio_info_and_save(
+    url: str, file_path_without_extension: str
+) -> tuple[str, int, int, str]:
+    """下载并保存 ComfyUI 输出的音频文件。"""
+    ext = "wav"
+    lower_url = url.lower()
+    for candidate in AUDIO_FORMATS:
+        if candidate in lower_url:
+            ext = candidate.lstrip(".")
+            break
+
+    async with HttpClient.create_aiohttp() as session:
+        async with session.get(url) as response:
+            audio_content = await response.read()
+
+    out_path = f"{file_path_without_extension}.{ext}"
+    async with aiofiles.open(out_path, "wb") as out_file:
+        await out_file.write(audio_content)
+    mime_type = mimetypes.types_map.get(f".{ext}", f"audio/{ext}")
+    return mime_type, 0, 0, ext
+
+
+def get_asset_path(filename: str) -> str:
+    """解析服务端内置工作流资产路径（兼容打包模式与源码运行）。"""
     if getattr(sys, "frozen", False):
-        # If the application is run as a bundle, the path is relative to the executable
         base_path = sys._MEIPASS
     else:
-        # If the application is run in a normal Python environment
         base_path = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         )
@@ -60,11 +87,10 @@ def get_asset_path(filename):
     return os.path.join(base_path, "asset", filename)
 
 
-class ComfyUIGenerator():
-    """ComfyUI image generator implementation"""
+class ComfyUIGenerator:
+    """ComfyUI 内置文生图执行器。"""
 
     def __init__(self):
-        # Load workflows
         asset_dir = get_asset_path("flux_comfy_workflow.json")
         basic_comfy_t2i_workflow = get_asset_path("default_comfy_t2i_workflow.json")
 
@@ -73,10 +99,10 @@ class ComfyUIGenerator():
         self.comfy_websocket_client = None
 
         try:
-            self.flux_comfy_workflow = json.load(open(asset_dir, "r"))
-            self.basic_comfy_t2i_workflow = json.load(
-                open(basic_comfy_t2i_workflow, "r")
-            )
+            with open(asset_dir, "r", encoding="utf-8") as f:
+                self.flux_comfy_workflow = json.load(f)
+            with open(basic_comfy_t2i_workflow, "r", encoding="utf-8") as f:
+                self.basic_comfy_t2i_workflow = json.load(f)
         except Exception:
             traceback.print_exc()
 
@@ -88,30 +114,18 @@ class ComfyUIGenerator():
         input_image: Optional[str] = None,
         **kwargs,
     ) -> tuple[str, int, int, str]:
-        """
-        Generate an image by calling offical ComfyUI Client
-        """
+        """执行默认文生图 ComfyUI 工作流。"""
         if not self.flux_comfy_workflow:
             raise FileNotFoundError("Flux workflow json not found")
 
-        # Get context from kwargs
         ctx = kwargs.get("ctx", {})
-
         api_url = str(
             config_service.app_config.get("comfyui", {}).get("url", "")
         ).rstrip("/")
 
-        # Process ratio
-        if "flux" in model:
-            # Flux generate images around 1M pixel (1024x1024)
-            pixel_count = 1024**2
-        else:
-            # sd 1.5, basic is 512, but acceopt 768 for better quality
-            pixel_count = 768**2
-
+        pixel_count = 1024**2 if "flux" in model else 768**2
         w_ratio, h_ratio = map(int, aspect_ratio.split(":"))
         factor = (pixel_count / (w_ratio * h_ratio)) ** 0.5
-
         width = int((factor * w_ratio) / 64) * 64
         height = int((factor * h_ratio) / 64) * 64
 
@@ -134,7 +148,6 @@ class ComfyUIGenerator():
         print("🦄image execution outputs", execution.outputs)
         url = execution.outputs[0]
 
-        # get image dimensions
         image_id = generate_image_id()
         mime_type, width, height, extension = await get_image_info_and_save(
             url, os.path.join(FILES_DIR, f"{image_id}")
@@ -143,22 +156,18 @@ class ComfyUIGenerator():
         return mime_type, width, height, filename
 
 
-class ComfyUIWorkflowRunner():
-    """ComfyUI image generator implementation"""
+class ComfyUIWorkflowRunner:
+    """通用动态 ComfyUI 工作流运行器，支持图片、视频与音频输出落盘。"""
 
-    def __init__(self, workflow_dict, base_url):
-        # Load workflows
+    def __init__(self, workflow_dict: dict, base_url: str):
         self.workflow = workflow_dict
         self.base_url = base_url
 
     async def generate(
         self,
         **kwargs,
-    ) -> tuple[str, int, int, str]:
-        """
-        Run a workflow by calling official ComfyUI Client
-        """
-        # Get context from kwargs
+    ) -> list[tuple[str, int, int, str]]:
+        """提交自定义工作流并将全部输出下载保存到 FILES_DIR。"""
         ctx = kwargs.get("ctx", {})
 
         execution = await execute(
@@ -168,16 +177,14 @@ class ComfyUIWorkflowRunner():
 
         results = []
         for url in execution.outputs:
-            # get image id
             image_id = generate_image_id()
-
-            # check is video or image.
             file_type = await detect_file_type_comprehensive(url)
-            get_info_func = (
-                get_video_info_and_save
-                if file_type == "video"
-                else get_image_info_and_save
-            )
+            if file_type == "video":
+                get_info_func = get_video_info_and_save
+            elif file_type == "audio":
+                get_info_func = get_audio_info_and_save
+            else:
+                get_info_func = get_image_info_and_save
 
             mime_type, width, height, extension = await get_info_func(
                 url, os.path.join(FILES_DIR, f"{image_id}")

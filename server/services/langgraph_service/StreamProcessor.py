@@ -36,10 +36,7 @@ class StreamProcessor:
         ):
             await self._handle_chunk(chunk)
 
-        # 发送完成事件
-        await self.websocket_service(self.session_id, {
-            'type': 'done'
-        })
+        # 完成事件统一由 chat_service._run_chat_task 的 finally 块发送，避免重复触发 done。
 
     async def _handle_chunk(self, chunk: Any) -> None:
         # print('👇chunk', chunk)

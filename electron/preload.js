@@ -15,6 +15,15 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 // console.log("Exposing API with methods:", Object.keys(exposedAPI));
 
+// 接收主进程转发的结构化窗口事件并派发为 DOM CustomEvent。
+ipcRenderer.on('jaaz-window-event', (_event, payload) => {
+  if (payload && typeof payload.event === 'string') {
+    window.dispatchEvent(
+      new CustomEvent(payload.event, { detail: payload.detail })
+    )
+  }
+})
+
 contextBridge.exposeInMainWorld('electronAPI', {
   openBrowserUrl: (url) => ipcRenderer.invoke('open-browser-url', url),
 

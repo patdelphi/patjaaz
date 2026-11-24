@@ -1,16 +1,18 @@
+/** 程序说明：画布主路由页，负责加载画布数据并在加载失败时提供可见错误提示与重试操作。 */
 import { getCanvas, renameCanvas } from '@/api/canvas'
 import CanvasExcali from '@/components/canvas/CanvasExcali'
 import CanvasHeader from '@/components/canvas/CanvasHeader'
 import CanvasMenu from '@/components/canvas/menu'
 import CanvasPopbarWrapper from '@/components/canvas/pop-bar'
-// VideoCanvasOverlay removed - using native Excalidraw embeddable elements instead
 import ChatInterface from '@/components/chat/Chat'
+import { Button } from '@/components/ui/button'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { CanvasProvider } from '@/contexts/canvas'
 import { Session } from '@/types/types'
 import { createFileRoute, useParams, useSearch } from '@tanstack/react-router'
-import { Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { AlertCircle, Loader2, RotateCw } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export const Route = createFileRoute('/canvas/$id')({
   component: Canvas,
@@ -18,16 +20,22 @@ export const Route = createFileRoute('/canvas/$id')({
 
 function Canvas() {
   const { id } = useParams({ from: '/canvas/$id' })
+  const { t } = useTranslation()
   const [canvas, setCanvas] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const [canvasName, setCanvasName] = useState('')
   const [sessionList, setSessionList] = useState<Session[]>([])
-  // initialVideos removed - using native Excalidraw embeddable elements instead
+  const [reloadCount, setReloadCount] = useState(0)
   const search = useSearch({ from: '/canvas/$id' }) as {
     sessionId: string
   }
   const searchSessionId = search?.sessionId || ''
+
+  const handleRetry = useCallback(() => {
+    setReloadCount((count) => count + 1)
+  }, [])
+
   useEffect(() => {
     let mounted = true
 
@@ -40,7 +48,6 @@ function Canvas() {
           setCanvas(data)
           setCanvasName(data.name)
           setSessionList(data.sessions)
-          // Video elements now handled by native Excalidraw embeddable elements
         }
       } catch (err) {
         if (mounted) {
@@ -54,12 +61,12 @@ function Canvas() {
       }
     }
 
-    fetchCanvas()
+    void fetchCanvas()
 
     return () => {
       mounted = false
     }
-  }, [id])
+  }, [id, reloadCount])
 
   const handleNameSave = async () => {
     await renameCanvas(id, canvasName)
@@ -82,10 +89,21 @@ function Canvas() {
           <ResizablePanel className='relative' defaultSize={75}>
             <div className='w-full h-full'>
               {isLoading ? (
-                <div className='flex-1 flex-grow px-4 bg-accent w-[24%] absolute right-0'>
-                  <div className='flex items-center justify-center h-full'>
-                    <Loader2 className='w-4 h-4 animate-spin' />
-                  </div>
+                <div className='flex items-center justify-center h-full'>
+                  <Loader2 className='w-5 h-5 animate-spin text-muted-foreground' />
+                </div>
+              ) : error ? (
+                <div
+                  role='alert'
+                  className='flex h-full flex-col items-center justify-center gap-3 p-6 text-center'
+                >
+                  <AlertCircle className='h-8 w-8 text-destructive' />
+                  <p className='text-base font-medium'>{t('canvas:messages.failedToLoad')}</p>
+                  <p className='max-w-md text-sm text-muted-foreground'>{error.message}</p>
+                  <Button variant='outline' size='sm' onClick={handleRetry}>
+                    <RotateCw className='mr-2 h-4 w-4' />
+                    {t('common:buttons.retry')}
+                  </Button>
                 </div>
               ) : (
                 <div className='relative w-full h-full'>

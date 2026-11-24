@@ -1,7 +1,8 @@
-/* 程序说明：在应用与 Socket.IO 启动前完成单一登录码校验。 */
+/* 程序说明：在应用与 Socket.IO 启动前完成单一登录码校验，并在会话过期或返回 401 时切回锁屏状态。 */
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import '@/i18n'
+import { eventBus } from '@/lib/event'
 import { LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
@@ -38,6 +39,21 @@ export function AuthGate({ children }: AuthGateProps) {
     void checkStatus()
   }, [checkStatus])
 
+  useEffect(() => {
+    // 任意受保护 API 收到 401 时立即切回锁屏并卸载 SocketProvider 停止重连
+    const handleUnauthorized = () => {
+      setState((prev) => {
+        if (prev === 'locked') return prev
+        setError(t('auth.sessionExpired'))
+        return 'locked'
+      })
+    }
+    eventBus.on('Auth::Unauthorized', handleUnauthorized)
+    return () => {
+      eventBus.off('Auth::Unauthorized', handleUnauthorized)
+    }
+  }, [t])
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!code.trim() || isSubmitting) return
@@ -50,6 +66,10 @@ export function AuthGate({ children }: AuthGateProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       })
+      if (response.status === 429) {
+        setError(t('auth.rateLimited'))
+        return
+      }
       if (response.status === 401) {
         setError(t('auth.invalid'))
         return

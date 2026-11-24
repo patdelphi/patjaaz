@@ -1,3 +1,4 @@
+/** 程序说明：渲染画布工具栏单个按钮及快捷键提示。 */
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -24,6 +25,7 @@ const CanvasMenuButton = ({
 }: CanvasMenuButtonProps) => {
   const { t } = useTranslation()
   const isActive = activeTool === type || active
+  const shortcut = toolShortcuts[type]
 
   return (
     <Tooltip>
@@ -31,6 +33,7 @@ const CanvasMenuButton = ({
         <Button
           variant="ghost"
           size="icon"
+          aria-label={t(`canvas:tool.${type}`)}
           className={cn(
             'p-2 rounded-md cursor-pointer hover:bg-primary/5',
             isActive && 'bg-primary/10'
@@ -46,7 +49,8 @@ const CanvasMenuButton = ({
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {t(`canvas:tool.${type}`)} ({toolShortcuts[type]})
+        {t(`canvas:tool.${type}`)}
+        {shortcut ? ` (${shortcut})` : ''}
       </TooltipContent>
     </Tooltip>
   )

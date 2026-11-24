@@ -1,7 +1,7 @@
 /* 程序说明：为当前选中的 Excalidraw 文字元素设置可保存的底色。 */
 import { Button } from '@/components/ui/button'
 import { useCanvas } from '@/contexts/canvas'
-import { CaptureUpdateAction } from '@excalidraw/excalidraw'
+import { mutateSceneElements } from '@/lib/excalidrawMutation'
 import { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import { Paintbrush, X } from 'lucide-react'
 import { useState } from 'react'
@@ -30,16 +30,11 @@ const CanvasTextBackground = ({ selectedTextElements }: CanvasTextBackgroundProp
     if (!excalidrawAPI) return
 
     const selectedTextIds = new Set(selectedTextElements.map((element) => element.id))
-    const elements = excalidrawAPI.getSceneElements().map((element) => {
+    mutateSceneElements(excalidrawAPI, (element) => {
       if (element.type === 'text' && selectedTextIds.has(element.id)) {
         return { ...element, backgroundColor }
       }
       return element
-    })
-
-    excalidrawAPI.updateScene({
-      elements,
-      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     })
   }
 

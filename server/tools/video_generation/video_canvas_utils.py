@@ -6,8 +6,6 @@ Contains functions for video processing, canvas operations, and notifications
 import json
 import time
 import os
-import asyncio
-from contextlib import asynccontextmanager
 from typing import Dict, List, Any, Tuple, Optional, Union
 from services.config_service import FILES_DIR
 from services.db_service import db_service
@@ -20,25 +18,7 @@ from pymediainfo import MediaInfo
 from nanoid import generate
 import random
 from utils.canvas import find_next_best_element_position
-
-
-class CanvasLockManager:
-    """Canvas lock manager to prevent concurrent operations causing position overlap"""
-
-    def __init__(self) -> None:
-        self._locks: Dict[str, asyncio.Lock] = {}
-
-    @asynccontextmanager
-    async def lock_canvas(self, canvas_id: str):
-        if canvas_id not in self._locks:
-            self._locks[canvas_id] = asyncio.Lock()
-
-        async with self._locks[canvas_id]:
-            yield
-
-
-# Global lock manager instance
-canvas_lock_manager = CanvasLockManager()
+from utils.canvas_lock import CanvasLockManager, canvas_lock_manager
 
 
 async def save_video_to_canvas(
@@ -152,7 +132,7 @@ async def send_video_error_notification(session_id: str, error_message: str) -> 
 
 def format_video_success_message(filename: str) -> str:
     """Format success message for video generation"""
-    return f"video generated successfully ![video_id: {filename}](http://localhost:{DEFAULT_PORT}/api/file/{filename})"
+    return f"video generated successfully ![video_id: {filename}](/api/file/{filename})"
 
 
 async def process_video_result(

@@ -1,179 +1,206 @@
-from fastapi.responses import FileResponse
-from fastapi.concurrency import run_in_threadpool
-from common import DEFAULT_PORT
-from tools.utils.image_canvas_utils import generate_file_id
-from services.config_service import FILES_DIR
-
-from PIL import Image
+"""程序说明：提供受限图片上传、本地资产文件读取与受白名单约束的 ComfyUI object_info 代理。"""
 from io import BytesIO
 import os
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 import httpx
-import aiofiles
-from mimetypes import guess_type
+from PIL import Image, UnidentifiedImageError
+from common import DEFAULT_PORT
+from services.config_service import FILES_DIR, config_service
+from tools.utils.image_canvas_utils import generate_file_id
 from utils.http_client import HttpClient
+from utils.path_security import (
+    PathSecurityError,
+    safe_file_id_path,
+    validate_comfyui_proxy_target,
+)
+
+MAX_UPLOAD_IMAGE_BYTES = 30 * 1024 * 1024
+MAX_UPLOAD_IMAGE_PIXELS = 40_000_000
+ALLOWED_IMAGE_MIME_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+    "image/x-ms-bmp",
+}
+ALLOWED_PIL_FORMATS = {
+    "PNG": "png",
+    "JPEG": "jpg",
+    "WEBP": "webp",
+    "GIF": "gif",
+    "BMP": "bmp",
+    "TIFF": "tiff",
+}
+
+# 防止 Pillow 打开超大解压炸弹图像耗尽内存。
+Image.MAX_IMAGE_PIXELS = MAX_UPLOAD_IMAGE_PIXELS
 
 router = APIRouter(prefix="/api")
 os.makedirs(FILES_DIR, exist_ok=True)
 
-# 上传图片接口，支持表单提交
+
+def validate_uploaded_image(
+    content: bytes,
+    content_type: str | None = None,
+    max_bytes: int = MAX_UPLOAD_IMAGE_BYTES,
+    max_pixels: int = MAX_UPLOAD_IMAGE_PIXELS,
+) -> tuple[str, int, int]:
+    """校验上传图片的字节大小、MIME 白名单、图像格式与像素总数，返回 (扩展名, 宽, 高)。"""
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded image exceeds limit ({max_bytes // (1024 * 1024)}MB)",
+        )
+
+    if content_type:
+        mime = content_type.split(";", 1)[0].strip().lower()
+        if mime and mime != "application/octet-stream" and mime not in ALLOWED_IMAGE_MIME_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unsupported image MIME type: {mime}")
+
+    try:
+        with Image.open(BytesIO(content)) as img:
+            img_format = (img.format or "").upper()
+            width, height = img.size
+            if width <= 0 or height <= 0 or width * height > max_pixels:
+                raise HTTPException(status_code=400, detail="Image pixel count exceeds allowed limit")
+            if img_format not in ALLOWED_PIL_FORMATS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported image format: {img_format or 'unknown'}",
+                )
+            img.verify()
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {exc}") from exc
+
+    return ALLOWED_PIL_FORMATS[img_format], width, height
+
+
 @router.post("/upload_image")
 async def upload_image(file: UploadFile = File(...), max_size_mb: float = 3.0):
-    print('🦄upload_image file', file.filename)
-    # 生成文件 ID 和文件名
+    """上传并校验图片；超过 max_size_mb 时按比例压缩为 JPEG。"""
     file_id = generate_file_id()
-    filename = file.filename or ''
 
-    # Read the file content
     try:
-        content = await file.read()
+        content = await file.read(MAX_UPLOAD_IMAGE_BYTES + 1)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading file: {e}")
-    original_size_mb = len(content) / (1024 * 1024)  # Convert to MB
 
-    # Open the image from bytes to get its dimensions
+    extension, width, height = validate_uploaded_image(content, file.content_type)
+    original_size_mb = len(content) / (1024 * 1024)
+
     with Image.open(BytesIO(content)) as img:
-        width, height = img.size
-        
-        # Check if compression is needed
         if original_size_mb > max_size_mb:
-            print(f'🦄 Image size ({original_size_mb:.2f}MB) exceeds limit ({max_size_mb}MB), compressing...')
-            
-            # Convert to RGB if necessary (for JPEG compression)
-            if img.mode in ('RGBA', 'LA', 'P'):
-                # Create a white background for transparent images
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                if img.mode == 'P':
-                    img = img.convert('RGBA')
-                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            if img.mode in ("RGBA", "LA", "P"):
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                 img = background
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
-            
-            # Compress the image
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
             compressed_content = compress_image(img, max_size_mb)
-            
-            # Save compressed image using Image.save
-            extension = 'jpg'  # Force JPEG for compressed images
-            file_path = os.path.join(FILES_DIR, f'{file_id}.{extension}')
-            
-            # Create new image from compressed content and save
+            extension = "jpg"
+            file_path = os.path.join(FILES_DIR, f"{file_id}.{extension}")
             with Image.open(BytesIO(compressed_content)) as compressed_img:
                 width, height = compressed_img.size
-                await run_in_threadpool(compressed_img.save, file_path, format='JPEG', quality=95, optimize=True)
-                # compressed_img.save(file_path, format='JPEG', quality=95, optimize=True)
-            
-            final_size_mb = len(compressed_content) / (1024 * 1024)
-            print(f'🦄 Compressed from {original_size_mb:.2f}MB to {final_size_mb:.2f}MB')
+                await run_in_threadpool(
+                    compressed_img.save, file_path, format="JPEG", quality=95, optimize=True
+                )
         else:
-            # Determine the file extension from original file
-            mime_type, _ = guess_type(filename)
-            if mime_type and mime_type.startswith('image/'):
-                extension = mime_type.split('/')[-1]
-                # Handle common image format mappings
-                if extension == 'jpeg':
-                    extension = 'jpg'
-            else:
-                extension = 'jpg'  # Default to jpg for unknown types
-            
-            # Save original image using Image.save
-            file_path = os.path.join(FILES_DIR, f'{file_id}.{extension}')
-            
-            # Determine save format based on extension
-            save_format = 'JPEG' if extension.lower() in ['jpg', 'jpeg'] else extension.upper()
-            if save_format == 'JPEG':
-                img = img.convert('RGB')
-            
-            # img.save(file_path, format=save_format)
+            file_path = os.path.join(FILES_DIR, f"{file_id}.{extension}")
+            save_format = "JPEG" if extension.lower() in ["jpg", "jpeg"] else extension.upper()
+            if save_format == "JPEG" and img.mode != "RGB":
+                img = img.convert("RGB")
             await run_in_threadpool(img.save, file_path, format=save_format)
 
-    # 返回文件信息
-    print('🦄upload_image file_path', file_path)
     return {
-        'file_id': f'{file_id}.{extension}',
-        'url': f'http://localhost:{DEFAULT_PORT}/api/file/{file_id}.{extension}',
-        'width': width,
-        'height': height,
+        "file_id": f"{file_id}.{extension}",
+        "url": f"/api/file/{file_id}.{extension}",
+        "width": width,
+        "height": height,
     }
 
 
 def compress_image(img: Image.Image, max_size_mb: float) -> bytes:
-    """
-    Compress an image to be under the specified size limit.
-    """
-    # Start with high quality
+    """将图像压缩至不超过指定 MB 大小。"""
     quality = 95
-    
     while quality > 10:
-        # Save to bytes buffer
         buffer = BytesIO()
-        img.save(buffer, format='JPEG', quality=quality, optimize=True)
-        
-        # Check size
-        size_mb = len(buffer.getvalue()) / (1024 * 1024)
-        
-        if size_mb <= max_size_mb:
+        img.save(buffer, format="JPEG", quality=quality, optimize=True)
+        if len(buffer.getvalue()) / (1024 * 1024) <= max_size_mb:
             return buffer.getvalue()
-        
-        # Reduce quality for next iteration
         quality -= 10
-    
-    # If still too large, try reducing dimensions
+
     original_width, original_height = img.size
     scale_factor = 0.8
-    
+    resized_img = img
     while scale_factor > 0.3:
-        new_width = int(original_width * scale_factor)
-        new_height = int(original_height * scale_factor)
+        new_width = max(1, int(original_width * scale_factor))
+        new_height = max(1, int(original_height * scale_factor))
         resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Try with moderate quality
         buffer = BytesIO()
-        resized_img.save(buffer, format='JPEG', quality=70, optimize=True)
-        
-        size_mb = len(buffer.getvalue()) / (1024 * 1024)
-        
-        if size_mb <= max_size_mb:
+        resized_img.save(buffer, format="JPEG", quality=70, optimize=True)
+        if len(buffer.getvalue()) / (1024 * 1024) <= max_size_mb:
             return buffer.getvalue()
-        
         scale_factor -= 0.1
-    
-    # Last resort: very low quality
+
     buffer = BytesIO()
-    resized_img.save(buffer, format='JPEG', quality=30, optimize=True)
+    resized_img.save(buffer, format="JPEG", quality=30, optimize=True)
     return buffer.getvalue()
 
 
-# 文件下载接口
 @router.get("/file/{file_id}")
 async def get_file(file_id: str):
-    file_path = os.path.join(FILES_DIR, f'{file_id}')
-    print('🦄get_file file_path', file_path)
-    if not os.path.exists(file_path):
+    """读取 FILES_DIR 内的媒体文件，拒绝路径穿越。"""
+    try:
+        file_path = safe_file_id_path(FILES_DIR, file_id)
+    except PathSecurityError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
 
 
 @router.post("/comfyui/object_info")
 async def get_object_info(data: dict):
-    url = data.get('url', '')
-    if not url:
-        raise HTTPException(status_code=400, detail="URL is required")
+    """仅向已配置的 ComfyUI 实例请求 /api/object_info。"""
+    configured_url = config_service.get_config().get("comfyui", {}).get("url", "")
+    try:
+        target_url = validate_comfyui_proxy_target(
+            configured_url, data.get("url"), "/api/object_info"
+        )
+    except PathSecurityError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         timeout = httpx.Timeout(10.0)
         async with HttpClient.create(timeout=timeout) as client:
-            response = await client.get(f"{url}/api/object_info")
+            response = await client.get(target_url)
             if response.status_code == 200:
                 return response.json()
-            else:
-                raise HTTPException(
-                    status_code=response.status_code, detail=f"ComfyUI server returned status {response.status_code}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"ComfyUI server returned status {response.status_code}",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         if "ConnectError" in str(type(e)) or "timeout" in str(e).lower():
-            print(f"ComfyUI connection error: {str(e)}")
             raise HTTPException(
-                status_code=503, detail="ComfyUI server is not available. Please make sure ComfyUI is running.")
-        print(f"Unexpected error connecting to ComfyUI: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to connect to ComfyUI: {str(e)}")
+                status_code=503,
+                detail="ComfyUI server is not available. Please make sure ComfyUI is running.",
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to connect to ComfyUI: {str(e)}")

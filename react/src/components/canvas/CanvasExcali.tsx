@@ -1,9 +1,9 @@
 import { getCanvas, saveCanvas } from '@/api/canvas'
-import {
-  findNewPersistableImageIds,
-  getPersistableImageIds,
-} from '@/lib/canvasImagePersistence'
+import { recomputeResizedBlockArrows } from '@/lib/blockArrow'
+import { findNewPersistableImageIds, getPersistableImageIds } from '@/lib/canvasImagePersistence'
 import { queueCanvasSave } from '@/lib/canvasSaveQueue'
+import { isAllowedEmbeddableUrl } from '@/lib/embeddableUrl'
+import { CAPTURE_UPDATE_IMMEDIATELY } from '@/lib/excalidrawMutation'
 import { useCanvas } from '@/contexts/canvas'
 import useDebounce from '@/hooks/use-debounce'
 import { useTheme } from '@/hooks/use-theme'
@@ -156,6 +156,18 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
   ) => {
     // Immediate UI updates
     handleSelectionChange(elements, appState)
+
+    // 块箭头被缩放结束后按参数重算闭合多边形顶点（非拉伸中执行避免高频重绘抖动）
+    if (excalidrawAPI && !appState.resizingElement) {
+      const updatedBlockArrows = recomputeResizedBlockArrows(elements)
+      if (updatedBlockArrows) {
+        excalidrawAPI.updateScene({
+          elements: updatedBlockArrows,
+          captureUpdate: CAPTURE_UPDATE_IMMEDIATELY,
+        })
+        return
+      }
+    }
 
     const newImageIds = findNewPersistableImageIds(
       elements,
@@ -502,11 +514,24 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
           return data || null
         }}
         renderEmbeddable={renderEmbeddable}
-        // Allow all URLs for embeddable content
+        // 仅允许同源 /api/file/ 资源作为画布内嵌媒体，禁止任意外部网页。
         validateEmbeddable={(url: string) => {
-          console.log('👇 Validating embeddable URL:', url)
-          // Allow all URLs - return true for everything
-          return true
+          return isAllowedEmbeddableUrl(url, window.location.origin)
+        }}
+        // 通过原生 UIOptions 关闭与 Jaaz 自定义菜单重复的系统动作项，减少脆弱 CSS 隐藏规则
+        UIOptions={{
+          canvasActions: {
+            changeViewBackgroundColor: false,
+            clearCanvas: false,
+            export: false,
+            loadScene: false,
+            saveToActiveFile: false,
+            toggleTheme: false,
+            saveAsImage: false,
+          },
+          tools: {
+            image: true,
+          },
         }}
         // Ensure interactive mode is enabled
         viewModeEnabled={false}

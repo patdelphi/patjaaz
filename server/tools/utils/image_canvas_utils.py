@@ -3,40 +3,20 @@ Canvas-related utilities for image generation
 Handles canvas operations, locking, and notifications
 """
 
-import asyncio
 import random
 import time
 import json
-from contextlib import asynccontextmanager
 from typing import Dict, List, Any, Optional, Union, cast
 from nanoid import generate
 from services.db_service import db_service
 from services.websocket_service import broadcast_session_update
 from services.websocket_service import send_to_websocket
 from utils.canvas import find_next_best_element_position
+from utils.canvas_lock import CanvasLockManager, canvas_lock_manager
 
 def generate_file_id() -> str:
     """Generate unique file ID"""
     return 'im_' + generate(size=8)
-
-
-class CanvasLockManager:
-    """Canvas lock manager to prevent concurrent operations causing position overlap"""
-
-    def __init__(self) -> None:
-        self._locks: Dict[str, asyncio.Lock] = {}
-
-    @asynccontextmanager
-    async def lock_canvas(self, canvas_id: str):
-        if canvas_id not in self._locks:
-            self._locks[canvas_id] = asyncio.Lock()
-
-        async with self._locks[canvas_id]:
-            yield
-
-
-# Global lock manager instance
-canvas_lock_manager = CanvasLockManager()
 
 
 

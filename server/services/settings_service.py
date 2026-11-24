@@ -36,7 +36,8 @@ app_settings = {}
 DEFAULT_SETTINGS = {
     "proxy": "system",  # 代理设置：'' (不使用代理), 'system' (使用系统代理), 或具体的代理URL地址
     "enabled_knowledge": [],  # 启用的知识库ID列表（保持兼容性）
-    "enabled_knowledge_data": []  # 启用的知识库完整数据列表
+    "enabled_knowledge_data": [],  # 启用的知识库完整数据列表
+    "allowed_browse_roots": [],  # 允许浏览的本机根目录白名单，空列表表示默认允许 FILES_DIR 与用户主目录
 }
 
 

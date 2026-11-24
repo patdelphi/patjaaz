@@ -1,13 +1,25 @@
-.excalidraw .shapes-section {
+/* ========================================================================
+ * Excalidraw 0.18.1 原生外壳隐藏规则（E14 集中管理）：
+ * 原生画布动作已通过 CanvasExcali.tsx 的 UIOptions.canvasActions 关闭；
+ * 下面几条是因为 Excalidraw 0.18.1 UIOptions 未提供外层容器关闭开关，
+ * 且 Jaaz 自建了 CanvasHeader / CanvasToolMenu / CanvasViewMenu 避免界面重复。
+ * ======================================================================== */
+.excalidraw .shapes-section,
+.excalidraw .Stack.Stack_vertical.App-menu_top__left > div,
+.ToolIcon__keybinding,
+.excalidraw .layer-ui__wrapper__top-right,
+.excalidraw .FixedSideContainer.FixedSideContainer_side_top.App-top-bar,
+.excalidraw .layer-ui__wrapper__footer.App-menu.App-menu_bottom,
+.excalidraw .App-bottom-bar {
   display: none !important;
 }
 
-/* Conditionally hide left toolbar panel when embeddable is selected */
+/* 选中内嵌视频元素时隐藏左侧原生样式面板 */
 .excalidraw.hide-left-panel .App-menu__left {
   display: none !important;
 }
 
-/* Video overlay styles */
+/* 内嵌视频悬浮层与返回内容按钮位置适配 */
 .video-overlay {
   position: absolute;
   top: 0;
@@ -21,39 +33,6 @@
 .video-overlay video {
   object-fit: contain;
   pointer-events: auto;
-}
-
-.excalidraw .Stack.Stack_vertical.App-menu_top__left>div {
-  display: none !important;
-}
-
-.ToolIcon__keybinding {
-  display: none !important;
-}
-
-/* Enable embeddable tool for video integration */
-/* .excalidraw .dropdown-menu .dropdown-menu-item[data-testid='toolbar-embeddable'] {
-  display: none !important;
-} */
-
-.excalidraw .dropdown-menu .dropdown-menu-item[data-testid='toolbar-laser']+div {
-  display: none !important;
-}
-
-.excalidraw .layer-ui__wrapper__top-right {
-  display: none !important;
-}
-
-.excalidraw .FixedSideContainer.FixedSideContainer_side_top.App-top-bar {
-  display: none !important;
-}
-
-.excalidraw .layer-ui__wrapper__footer.App-menu.App-menu_bottom {
-  display: none !important;
-}
-
-.excalidraw .App-bottom-bar {
-  display: none !important;
 }
 
 .scroll-back-to-content {

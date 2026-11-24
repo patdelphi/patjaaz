@@ -1,9 +1,11 @@
 ﻿"""程序说明：从 ComfyUI 任务历史中恢复媒体输出，并阻止空输出被当作成功。"""
 from urllib.parse import urlencode
 
+COMFY_OUTPUT_KEYS = ("images", "gifs", "videos", "audio")
+
 
 def history_output_urls(history_record, base_url):
-    """从单个 ComfyUI 历史记录中提取图像和动图的 /view 地址。"""
+    """从单个 ComfyUI 历史记录中提取图像、动图、视频和音频的 /view 地址。"""
     if not isinstance(history_record, dict):
         return []
 
@@ -15,7 +17,7 @@ def history_output_urls(history_record, base_url):
     for node_output in node_outputs.values():
         if not isinstance(node_output, dict):
             continue
-        for output_type in ("images", "gifs"):
+        for output_type in COMFY_OUTPUT_KEYS:
             media_items = node_output.get(output_type, [])
             if not isinstance(media_items, list):
                 continue

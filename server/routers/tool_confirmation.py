@@ -41,5 +41,7 @@ async def handle_tool_confirmation(request: ToolConfirmationRequest):
                     status_code=404, detail="Tool call not found or already processed")
 
         return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

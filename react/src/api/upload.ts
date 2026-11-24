@@ -1,4 +1,5 @@
 /** 程序说明：压缩并上传聊天图片，同时校验服务端返回数据。 */
+import { apiFetch } from '@/lib/apiFetch'
 import { compressImageFile } from '@/utils/imageUtils'
 
 export async function uploadImage(
@@ -9,7 +10,7 @@ export async function uploadImage(
 
   const formData = new FormData()
   formData.append('file', compressedFile)
-  const response = await fetch('/api/upload_image', {
+  const response = await apiFetch('/api/upload_image', {
     method: 'POST',
     body: formData,
   })

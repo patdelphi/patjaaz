@@ -28,10 +28,13 @@ import os
 import shutil
 import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from services.config_service import config_service
 from services.db_service import db_service
 from services.settings_service import settings_service
 from services.tool_service import tool_service
 from services.knowledge_service import list_user_enabled_knowledge
+from utils.http_client import HttpClient
+from utils.path_security import PathSecurityError, validate_comfyui_proxy_target
 from pydantic import BaseModel
 
 # 创建设置相关的路由器，所有端点都以 /api/settings 为前缀
@@ -274,25 +277,31 @@ async def delete_workflow(id: int):
 
 @router.post("/comfyui/proxy")
 async def comfyui_proxy(request: Request):
+    """仅向配置中的 ComfyUI 实例转发白名单内的只读查询路径。"""
     try:
-        # 从请求中获取ComfyUI的目标URL和路径
         data = await request.json()
-        target_url = data.get("url")  # 前端传递的ComfyUI地址（如http://127.0.0.1:8188）
-        path = data.get("path", "")   # 请求的路径（如/system_stats）
+        requested_url = data.get("url")
+        path = data.get("path", "")
+        configured_url = config_service.get_config().get("comfyui", {}).get("url", "")
 
-        if not target_url or not path:
-            raise HTTPException(
-                status_code=400, detail="Missing 'url' or 'path' in request body")
+        try:
+            full_url = validate_comfyui_proxy_target(configured_url, requested_url, path)
+        except PathSecurityError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        # 构造完整的ComfyUI请求URL
-        full_url = f"{target_url}{path}"
-
-        # 使用httpx转发请求（支持GET/POST等方法，这里示例用GET）
-        async with httpx.AsyncClient() as client:
+        async with HttpClient.create(timeout=httpx.Timeout(10.0)) as client:
             response = await client.get(full_url)
-            # 将ComfyUI的响应原样返回给前端
+            response.raise_for_status()
             return response.json()
-
+    except HTTPException:
+        raise
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=f"ComfyUI server returned status {exc.response.status_code}",
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Proxy request failed: {str(e)}")

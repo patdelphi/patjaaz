@@ -1,6 +1,11 @@
+"""程序说明：Jaaz 后端 FastAPI + Socket.IO 入口，负责鉴权中间件、安全响应头与过期 Socket 定期清理。"""
+import argparse
+import asyncio
+from contextlib import asynccontextmanager, suppress
+import io
 import os
 import sys
-import io
+
 # Ensure stdout and stderr use utf-8 encoding to prevent emoji logs from crashing python server
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
@@ -8,16 +13,15 @@ print('Importing websocket_router')
 from routers.websocket_router import *  # DO NOT DELETE THIS LINE, OTHERWISE, WEBSOCKET WILL NOT WORK
 print('Importing routers')
 from routers import auth as auth_router, config_router, image_router, root_router, workspace, canvas, ssl_test, chat_router, settings, tool_confirmation
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI, Request
-import argparse
-from contextlib import asynccontextmanager
-from starlette.types import Scope
+import socketio  # type: ignore
 from starlette.responses import JSONResponse, Response
-import socketio # type: ignore
+from starlette.types import Scope
+
 print('Importing websocket_state')
-from services.websocket_state import sio
+from services.websocket_state import disconnect_expired_sockets, sio
 print('Importing websocket_service')
 from services.websocket_service import broadcast_init_done
 print('Importing config_service')
@@ -26,23 +30,65 @@ print('Importing tool_service')
 from services.tool_service import tool_service
 from services.auth_service import SESSION_COOKIE_NAME, auth_service
 
+BASE_CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "media-src 'self' data: blob:; "
+    "font-src 'self' data:; "
+    "worker-src 'self' blob:; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "object-src 'none'"
+)
+
+
+def apply_security_headers(response: Response, path: str = "/") -> Response:
+    """为 HTTP 响应统一注入防点击劫持、防 MIME 嗅探及基础 CSP 策略头。"""
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    if not (path == "/api" or path.startswith("/api/")):
+        response.headers.setdefault("Content-Security-Policy", BASE_CSP_POLICY)
+    return response
+
+
+async def _expired_socket_reaper() -> None:
+    """定期扫描并断开会话已过期的 Socket.IO 连接。"""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await disconnect_expired_sockets()
+        except Exception as exc:
+            print(f"Error reaping expired sockets: {exc}")
+
+
 async def initialize():
     print('Initializing config_service')
     await config_service.initialize()
     print('Initializing broadcast_init_done')
     await broadcast_init_done()
 
+
 root_dir = os.path.dirname(__file__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # onstartup
     auth_service.require_configured()
-    # TODO: Check if there will be racing conditions when user send chat request but tools and models are not initialized yet.
     await initialize()
     await tool_service.initialize()
-    yield
-    # onshutdown
+    reaper_task = asyncio.create_task(_expired_socket_reaper())
+    try:
+        yield
+    finally:
+        # onshutdown
+        reaper_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await reaper_task
+
 
 print('Creating FastAPI app')
 app = FastAPI(lifespan=lifespan)
@@ -50,15 +96,20 @@ app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
 async def require_access_code(request: Request, call_next):
-    """保护所有 API；登录状态检查、登录和退出接口保持公开。"""
+    """保护所有 API（/api/auth/* 除外），并附加安全响应头。"""
     path = request.url.path
     is_auth_route = path == "/api/auth" or path.startswith("/api/auth/")
     is_api_route = path == "/api" or path.startswith("/api/")
     if is_api_route and not is_auth_route:
         session_token = request.cookies.get(SESSION_COOKIE_NAME)
         if not auth_service.is_valid_session(session_token):
-            return JSONResponse(status_code=401, content={"detail": "Login required"})
-    return await call_next(request)
+            return apply_security_headers(
+                JSONResponse(status_code=401, content={"detail": "Login required"}),
+                path,
+            )
+    response = await call_next(request)
+    return apply_security_headers(response, path)
+
 
 # Include routers
 print('Including routers')
@@ -74,8 +125,9 @@ app.include_router(chat_router.router)
 app.include_router(tool_confirmation.router)
 
 # Mount the React build directory
-react_build_dir = os.environ.get('UI_DIST_DIR', os.path.join(
-    os.path.dirname(root_dir), "react", "dist"))
+react_build_dir = os.environ.get(
+    'UI_DIST_DIR', os.path.join(os.path.dirname(root_dir), "react", "dist")
+)
 
 
 # 无缓存静态文件类
@@ -101,6 +153,7 @@ async def serve_react_app():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
 
 print('Creating socketio app')
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app, socketio_path='/socket.io')

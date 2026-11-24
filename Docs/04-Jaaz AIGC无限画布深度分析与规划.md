@@ -1,6 +1,7 @@
 ﻿# Jaaz AIGC 无限画布：现状深度分析与发展规划
 
 > 文档日期：2026-11-24（v4：补充详细技术设计 [06-Jaaz AIGC无限画布详细技术设计.md](./06-Jaaz%20AIGC无限画布详细技术设计.md) 与深挖代码缺陷）
+> 实施状态：M0 加固（安全 P0、数据一致性、已知 bug 修复、鉴权补强）与 M1 画布快速改进（E1①/E1②/E2/E3/E4/E14）代码与自动单测已完成；M1 主体去云端/ComfyUI 能力层与 M2 pi Agent 待开展。
 > 分析范围：当前工作区（含未提交的本地改动）的 `server/`、`react/src/`、`electron/`、`Docs/`、`todo.md`
 > 目标定位：本地运行的 AIGC 无限画布，对标 Lovart、Flora、Krea Nodes、Figma Weave
 > 配套文档：[00-文档索引.md](./00-文档索引.md)、[05-Jaaz Agent机制评估与pi改造方案.md](./05-Jaaz%20Agent机制评估与pi改造方案.md)、[06-Jaaz AIGC无限画布详细技术设计.md](./06-Jaaz%20AIGC无限画布详细技术设计.md)
