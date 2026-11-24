@@ -1,3 +1,4 @@
+/** 程序说明：提供聊天输入、图片附件上传和消息发送交互。 */
 import { cancelChat } from '@/api/chat'
 import { cancelMagicGenerate } from '@/api/magic'
 import { uploadImage } from '@/api/upload'
@@ -8,7 +9,8 @@ import {
   TCanvasAddImagesToChatEvent,
   TMaterialAddImagesToChatEvent,
 } from '@/lib/event'
-import { cn, dataURLToFile } from '@/lib/utils'
+import { canvasChatImageToFile } from '@/lib/canvasChatImage'
+import { cn } from '@/lib/utils'
 import { Message, MessageContent, Model } from '@/types/types'
 import { ModelInfo, ToolInfo } from '@/api/model'
 import { useMutation } from '@tanstack/react-query'
@@ -31,9 +33,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import ModelSelectorV2 from './ModelSelectorV2'
 import ModelSelectorV3 from './ModelSelectorV3'
-import { useAuth } from '@/contexts/AuthContext'
-import { useBalance } from '@/hooks/use-balance'
-import { BASE_API_URL } from '@/constants'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,9 +64,7 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
   onCancelChat,
 }) => {
   const { t } = useTranslation()
-  const { authStatus } = useAuth()
-  const { textModel, selectedTools, setShowLoginDialog } = useConfigs()
-  const { balance } = useBalance()
+  const { textModel, selectedTools } = useConfigs()
   const [prompt, setPrompt] = useState('')
   const textareaRef = useRef<TextAreaRef>(null)
   const [images, setImages] = useState<
@@ -81,36 +78,14 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('auto')
   const [quantity, setQuantity] = useState<number>(1)
   const [showQuantitySlider, setShowQuantitySlider] = useState(false)
+  const [pendingImageUploads, setPendingImageUploads] = useState(0)
   const quantitySliderRef = useRef<HTMLDivElement>(null)
+  const preparingSendRef = useRef(false)
   const MAX_QUANTITY = 30
 
   const imageInputRef = useRef<HTMLInputElement>(null)
 
-  // 充值按钮组件
-  const RechargeContent = useCallback(() => (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-muted-foreground flex-1">
-        {t('chat:insufficientBalanceDescription')}
-      </span>
-      <Button
-        size="sm"
-        variant="outline"
-        className="shrink-0"
-        onClick={() => {
-          const billingUrl = `${BASE_API_URL}/billing`
-          if (window.electronAPI?.openBrowserUrl) {
-            window.electronAPI.openBrowserUrl(billingUrl)
-          } else {
-            window.open(billingUrl, '_blank')
-          }
-        }}
-      >
-        {t('common:auth.recharge')}
-      </Button>
-    </div>
-  ), [t])
-
-  const { mutate: uploadImageMutation } = useMutation({
+  const { mutateAsync: uploadImageMutation } = useMutation({
     mutationFn: (file: File) => uploadImage(file),
     onSuccess: (data) => {
       console.log('🦄uploadImageMutation onSuccess', data)
@@ -131,16 +106,31 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
     },
   })
 
+  const uploadImageFiles = useCallback(
+    async (files: File[], reservedCount = 0) => {
+      if (files.length === 0 && reservedCount === 0) return
+      const additionalCount = Math.max(0, files.length - reservedCount)
+      setPendingImageUploads((count) => count + additionalCount)
+      try {
+        await Promise.allSettled(files.map((file) => uploadImageMutation(file)))
+      } finally {
+        setPendingImageUploads((count) =>
+          Math.max(0, count - additionalCount - reservedCount)
+        )
+      }
+    },
+    [uploadImageMutation]
+  )
+
   const handleImagesUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files
       if (files) {
-        for (const file of files) {
-          uploadImageMutation(file)
-        }
+        void uploadImageFiles(Array.from(files))
+        e.target.value = ''
       }
     },
-    [uploadImageMutation]
+    [uploadImageFiles]
   )
 
   const handleCancelChat = useCallback(async () => {
@@ -153,28 +143,10 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
 
   // Send Prompt
   const handleSendPrompt = useCallback(async () => {
-    if (pending) return
-
-    // 检查是否使用 Jaaz 服务
-    const isUsingJaaz =
-      textModel?.provider === 'jaaz' ||
-      selectedTools?.some((tool) => tool.provider === 'jaaz')
-    // console.log('👀isUsingJaaz', textModel, selectedTools, isUsingJaaz)
-
-    // 只有当使用 Jaaz 服务且余额为 0 时才提醒充值
-    if (authStatus.is_logged_in && isUsingJaaz && parseFloat(balance) <= 0) {
-      toast.error(t('chat:insufficientBalance'), {
-        description: <RechargeContent />,
-        duration: 10000, // 10s，给用户更多时间操作
-      })
-      return
-    }
+    if (pending || pendingImageUploads > 0 || preparingSendRef.current) return
 
     if (!textModel) {
       toast.error(t('chat:textarea.selectModel'))
-      if (!authStatus.is_logged_in) {
-        setShowLoginDialog(true)
-      }
       return
     }
 
@@ -183,7 +155,7 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
     }
 
     let text_content: MessageContent[] | string = prompt
-    if (prompt.length === 0 || prompt.trim() === '') {
+    if (prompt.trim() === '' && images.length === 0) {
       toast.error(t('chat:textarea.enterPrompt'))
       return
     }
@@ -209,18 +181,37 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
       text_content += `\n</input_images>`
     }
 
-    // Fetch images as base64
-    const imagePromises = images.map(async (image) => {
-      const response = await fetch(`/api/file/${image.file_id}`)
-      const blob = await response.blob()
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.readAsDataURL(blob)
+    // 读取附件失败时保留输入内容，避免用户误以为消息已发送。
+    let base64Images: string[]
+    preparingSendRef.current = true
+    try {
+      base64Images = await Promise.all(
+        images.map(async (image) => {
+          const response = await fetch(`/api/file/${encodeURIComponent(image.file_id)}`)
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null)
+            throw new Error(
+              payload?.detail || `Image request failed (HTTP ${response.status})`
+            )
+          }
+          const blob = await response.blob()
+          return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = () =>
+              reject(reader.error || new Error('Failed to read attached image'))
+            reader.readAsDataURL(blob)
+          })
+        })
+      )
+    } catch (error) {
+      toast.error(t('chat:textarea.imageLoadFailed'), {
+        description: `${error}`,
       })
-    })
-
-    const base64Images = await Promise.all(imagePromises)
+      return
+    } finally {
+      preparingSendRef.current = false
+    }
 
     const final_content = [
       {
@@ -251,6 +242,7 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
     })
   }, [
     pending,
+    pendingImageUploads,
     textModel,
     selectedTools,
     prompt,
@@ -260,10 +252,6 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
     t,
     selectedAspectRatio,
     quantity,
-    authStatus.is_logged_in,
-    setShowLoginDialog,
-    balance,
-    RechargeContent,
   ])
 
   // Drop Area
@@ -272,11 +260,9 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
 
   const handleFilesDrop = useCallback(
     (files: File[]) => {
-      for (const file of files) {
-        uploadImageMutation(file)
-      }
+      void uploadImageFiles(files)
     },
-    [uploadImageMutation]
+    [uploadImageFiles]
   )
 
   useDrop(dropAreaRef, {
@@ -293,47 +279,70 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
   })
 
   useEffect(() => {
-    const handleAddImagesToChat = (data: TCanvasAddImagesToChatEvent) => {
-      data.forEach(async (image) => {
-        if (image.base64) {
-          const file = dataURLToFile(image.base64, image.fileId)
-          uploadImageMutation(file)
-        } else {
-          setImages(
-            produce((prev) => {
-              prev.push({
-                file_id: image.fileId,
-                width: image.width,
-                height: image.height,
-              })
-            })
-          )
-        }
-      })
+    const handleAddImagesToChat = async (data: TCanvasAddImagesToChatEvent) => {
+      const serverImages: typeof images = []
+      const files: File[] = []
+      const errors: string[] = []
 
+      setPendingImageUploads((count) => count + data.length)
+      for (const image of data) {
+        try {
+          const file = await canvasChatImageToFile(image)
+          if (file) {
+            files.push(file)
+          } else {
+            serverImages.push({
+              file_id: image.fileId,
+              width: image.width,
+              height: image.height,
+            })
+          }
+        } catch (error) {
+          errors.push(`${error}`)
+        }
+      }
+
+      if (serverImages.length > 0) {
+        setImages((prev) => [...prev, ...serverImages])
+      }
+      await uploadImageFiles(files, data.length)
+      if (errors.length > 0) {
+        toast.error(t('chat:textarea.imageLoadFailed'), {
+          description: errors.join('\n'),
+        })
+      }
       textareaRef.current?.focus()
     }
 
     const handleMaterialAddImagesToChat = async (
       data: TMaterialAddImagesToChatEvent
     ) => {
-      data.forEach(async (image: TMaterialAddImagesToChatEvent[0]) => {
-        // Convert file path to blob and upload
+      const files: File[] = []
+      const errors: string[] = []
+      for (const image of data) {
         try {
           const fileUrl = `/api/serve_file?file_path=${encodeURIComponent(image.filePath)}`
           const response = await fetch(fileUrl)
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
           const blob = await response.blob()
-          const file = new File([blob], image.fileName, {
-            type: `image/${image.fileType}`,
-          })
-          uploadImageMutation(file)
+          files.push(
+            new File([blob], image.fileName, {
+              type: blob.type || `image/${image.fileType}`,
+            })
+          )
         } catch (error) {
           console.error('Failed to load image from material:', error)
-          toast.error('Failed to load image from material', {
-            description: `${error}`,
-          })
+          errors.push(`${error}`)
         }
-      })
+      }
+      await uploadImageFiles(files)
+      if (errors.length > 0) {
+        toast.error('Failed to load image from material', {
+          description: errors.join('\n'),
+        })
+      }
 
       textareaRef.current?.focus()
     }
@@ -344,7 +353,7 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
       eventBus.off('Canvas::AddImagesToChat', handleAddImagesToChat)
       eventBus.off('Material::AddImagesToChat', handleMaterialAddImagesToChat)
     }
-  }, [uploadImageMutation])
+  }, [uploadImageFiles, t])
 
   // Close quantity slider when clicking outside
   useEffect(() => {
@@ -472,6 +481,12 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
             onChange={handleImagesUpload}
             hidden
           />
+          {pendingImageUploads > 0 && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              {t('chat:textarea.uploadingImages')}
+            </span>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -588,7 +603,12 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
             variant="default"
             size="icon"
             onClick={handleSendPrompt}
-            disabled={!textModel || !selectedTools || prompt.length === 0}
+            disabled={
+              !textModel ||
+              !selectedTools ||
+              (prompt.trim().length === 0 && images.length === 0) ||
+              pendingImageUploads > 0
+            }
           >
             <ArrowUp className="size-4" />
           </Button>

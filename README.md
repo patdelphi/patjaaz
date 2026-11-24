@@ -113,10 +113,6 @@ Plan scenes with an unlimited canvas
 ## Usage
 Download here: https://jaaz.app/
 
-Click the "Log In" button at the top right of the homepage to access API models. With a low-cost plan, you can seamlessly use a variety of powerful APIs.
-
-<img width="400" alt="Screenshot 2025-06-02 at 3 08 51 PM" src="https://github.com/user-attachments/assets/0055557d-c247-4801-ac3f-01ed4fa775ae" />
-
 
 Start chatting with agent to generate stories or storyboards!
 

@@ -26,8 +26,6 @@
 支持通过 Ollama、ComfyUI 运行本地模型，也支持 Replicate、OpenAI 或 Claude 等远程 API。可实现 100% 本地运行或连接到云端。
 
 轻松接入所有最强 API
-登录后，你可以使用所有最新的模型（gpt-image-1, flux kntext, google……）。
-
 交互式图像编辑
 支持对象插入、风格迁移和通过 Flux Kontext 实现多角色一致性等高级操作——所有这些都可以通过聊天来控制。
 
@@ -39,11 +37,7 @@
 
 ## 使用方法
 
-1. 点击程序主页右上角的“登录”按钮，即可使用各个模型的 API。支付少量费用，你就可以顺畅地使用API 模型，切积分永不过期。
-
-<img width="400" alt="Screenshot 2025-06-02 at 3 08 51 PM" src="https://github.com/user-attachments/assets/0055557d-c247-4801-ac3f-01ed4fa775ae" />
-
-2. 你也可以自定义绑定的 API，添加像 OpenAI 或 Claude 这样的 LLM API 密钥，或者安装 Ollama 来使用本地模型。
+1. 你也可以自定义绑定的 API，添加像 OpenAI 或 Claude 这样的 LLM API 密钥，或者安装 Ollama 来使用本地模型。
 
 添加像 Replicate 这样的图像生成 API 密钥。 [Replicate](https://replicate.com/)
 
@@ -82,7 +76,9 @@
 
 首先 git clone 这个仓库：
 
-`git clone https://github.com/11cafe/localart`
+首次运行前，请将 `.env.example` 复制为 `.env` 并设置 `JAAZ_ACCESS_CODE`。
+
+`git clone https://github.com/11cafe/jaaz`
 
 `cd react`
 
@@ -98,19 +94,14 @@
 
 ## 开发
 
-🟠 **Need Python version >=3.12**
+需要 Python 3.12 或更高版本，并在仓库根目录安装依赖：
 
-VSCode/Cursor Install Extensions：
+`npm install`
 
-- Black Formatter by ms-python (ms-python.black-formatter)
+`npm --prefix react install --force`
 
-`cd react`
+`python -m pip install -r server/requirements.txt`
 
-`npm install --force && npm run dev`
+首次启动前，将 .env.example 复制为 .env 并设置 JAAZ_ACCESS_CODE。之后运行：
 
-`cd server`
-
-`pip install -r requirements.txt`
-
-`python main.py`
-
+`npm run dev`

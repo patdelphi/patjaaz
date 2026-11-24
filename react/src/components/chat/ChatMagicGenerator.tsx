@@ -1,10 +1,8 @@
 import { sendMagicGenerate } from '@/api/magic'
-import { useConfigs } from '@/contexts/configs'
 import { eventBus, TCanvasMagicGenerateEvent } from '@/lib/event'
 import { Message, PendingType } from '@/types/types'
 import { useCallback, useEffect } from 'react'
 import { DEFAULT_SYSTEM_PROMPT } from '@/constants'
-import { useAuth } from '@/contexts/AuthContext'
 
 type ChatMagicGeneratorProps = {
     sessionId: string
@@ -23,16 +21,8 @@ const ChatMagicGenerator: React.FC<ChatMagicGeneratorProps> = ({
     setPending,
     scrollToBottom
 }) => {
-    const { setShowLoginDialog } = useConfigs()
-    const { authStatus } = useAuth()
-
     const handleMagicGenerate = useCallback(
         async (data: TCanvasMagicGenerateEvent) => {
-            if (!authStatus.is_logged_in) {
-                setShowLoginDialog(true)
-                return
-            }
-
             // 设置pending状态为text，表示正在处理
             setPending('text')
 
@@ -75,7 +65,7 @@ const ChatMagicGenerator: React.FC<ChatMagicGeneratorProps> = ({
                 setPending(false)
             }
         },
-        [sessionId, canvasId, messages, setMessages, setPending, scrollToBottom, authStatus.is_logged_in, setShowLoginDialog]
+        [sessionId, canvasId, messages, setMessages, setPending, scrollToBottom]
     )
 
     useEffect(() => {

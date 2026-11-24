@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request
 from services.chat_service import handle_chat
 from services.magic_service import handle_magic
-from services.stream_service import get_stream_task
+from services.stream_service import get_stream_status, get_stream_task
 from typing import Dict
 
 router = APIRouter(prefix="/api")
@@ -19,11 +19,17 @@ async def chat(request: Request):
         JSON object containing chat data.
 
     Response:
-        {"status": "done"}
+        {"status": "accepted", "session_id": "..."}
     """
     data = await request.json()
     await handle_chat(data)
-    return {"status": "done"}
+    return {"status": "accepted", "session_id": data.get("session_id", "")}
+
+
+@router.get("/chat/status/{session_id}")
+async def chat_status(session_id: str):
+    """返回活跃聊天任务状态，供页面刷新或重连后恢复进度。"""
+    return get_stream_status(session_id)
 
 @router.post("/cancel/{session_id}")
 async def cancel_chat(session_id: str):

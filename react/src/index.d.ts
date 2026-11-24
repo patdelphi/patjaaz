@@ -92,8 +92,6 @@ export declare const DialogTitle: React.FC<any>
 export declare const DialogTrigger: React.FC<any>
 
 // Contexts & Hooks
-export declare const AuthProvider: React.FC<{ children: ReactNode }>
-export declare const useAuth: () => any
 export declare const ConfigsProvider: React.FC<{ children: ReactNode }>
 export declare const useConfigs: () => any
 export declare const useDebounce: (callback: any, delay: number) => any

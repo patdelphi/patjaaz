@@ -64,19 +64,34 @@
   z-index: 60 !important;
 }
 
+/* 画布右键菜单固定使用浅色面板，避免透明度和主题变量把菜单混成深色。 */
 .excalidraw .popover .context-menu {
+  color-scheme: light !important;
+  --popup-secondary-bg-color: #ffffff;
+  --popup-bg-color: #18181b;
+  --popup-text-color: #18181b;
+  --select-highlight-color: #e4e4e7;
+  --button-gray-3: #e4e4e7;
   border-radius: 10px !important;
-  border-color: color-mix(in oklab, var(--primary) 10%, transparent) !important;
-  background-color: color-mix(in oklab,
-      var(--background) 70%,
-      transparent) !important;
-  backdrop-filter: blur(60px) !important;
-  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #e4e4e7 !important;
+  background-color: #ffffff !important;
+  color: #18181b !important;
+  backdrop-filter: blur(12px) !important;
+  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.14) !important;
   font-size: 14px !important;
 }
 
+.excalidraw .popover .context-menu .context-menu-item,
+.excalidraw .popover .context-menu .context-menu-item:hover {
+  color: #18181b !important;
+}
+
+.excalidraw .popover .context-menu .context-menu-item:hover {
+  background-color: #e4e4e7 !important;
+}
+
 .excalidraw .popover .context-menu .context-menu-item-separator {
-  border-color: color-mix(in oklab, var(--primary) 8%, transparent) !important;
+  border-top-color: #e4e4e7 !important;
   margin: 4px 0 !important;
 }
 

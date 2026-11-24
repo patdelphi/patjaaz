@@ -16,6 +16,7 @@
     "canvasDeleted": "Canvas deleted successfully",
     "canvasExported": "Canvas exported successfully",
     "canvasImported": "Canvas imported successfully",
+    "failedToSave": "Canvas save failed; your changes may not be saved",
     "failedToRename": "Failed to rename canvas",
     "failedToDelete": "Failed to delete canvas",
     "failedToCreateFile": "Failed to create file",
@@ -44,7 +45,11 @@
   },
   "popbar": {
     "addToChat": "Add to chat",
-    "magicGenerate": "✨ Magic Generate"
+    "magicGenerate": "✨ Magic Generate",
+    "textBackground": "Text background",
+    "applyTextBackground": "Set text background",
+    "customTextBackground": "Custom background",
+    "removeTextBackground": "Remove background"
   },
   "myAssets": "My Assets",
   "selectAFolder": "Select a folder",

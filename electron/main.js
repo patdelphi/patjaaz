@@ -39,6 +39,8 @@ const { autoUpdater } = require('electron-updater')
 
 const net = require('net')
 
+const DEFAULT_API_PORT = 57988
+
 // Initialize settings service
 const settingsService = require('./settingsService')
 
@@ -81,6 +83,7 @@ function findAvailablePort(startPort, maxAttempts = 100) {
 let mainWindow
 let pyProc = null
 let pyPort = null
+let pyStartError = null
 let childWindows = [] // Track all child windows
 
 // check for updates after the app is ready
@@ -202,104 +205,124 @@ const createWindow = (pyPort) => {
 const appRoot = app.getAppPath()
 
 const startPythonApi = async () => {
-  // Find an available port
-  pyPort = await findAvailablePort(57988)
-  console.log('available pyPort:', pyPort)
+  const isDevelopment = process.env.NODE_ENV === 'development'
 
-  // 在某些开发情况，我们希望 python server 独立运行，那么就不通过 electron 启动
-  if (process.env.NODE_ENV === 'development') {
+  // 开发模式固定使用 Vite 和 Socket.IO 约定的端口；只复用 Jaaz 后端。
+  if (isDevelopment) {
     try {
-      const response = await fetch(`http://127.0.0.1:${pyPort}`)
-      if (response.ok) {
-        console.log('Python service already running on port:', pyPort)
+      // 用公开状态接口识别已启用登录保护的 Jaaz 后端。
+      const response = await fetch('http://127.0.0.1:' + DEFAULT_API_PORT + '/api/auth/status', {
+        signal: AbortSignal.timeout(1500),
+      })
+      const payload = response.ok ? await response.json() : null
+      if (payload?.enabled === true) {
+        pyPort = DEFAULT_API_PORT
+        console.log('Reusing Jaaz backend on port:', pyPort)
         return pyPort
       }
     } catch (error) {
-      console.log('Starting Python service on port:', pyPort)
+      console.log('No ready Jaaz backend on the development port')
     }
-  } else {
-    console.log('Starting Python service on port:', pyPort)
   }
 
-  // 确定UI dist目录
+  pyPort = await findAvailablePort(DEFAULT_API_PORT)
+  if (isDevelopment && pyPort !== DEFAULT_API_PORT) {
+    throw new Error('Port ' + DEFAULT_API_PORT + ' is occupied by a service that is not Jaaz.')
+  }
+  console.log('available pyPort:', pyPort)
+
   const env = {
     ...process.env,
   }
   env.PYTHONIOENCODING = 'utf-8'
-  env.DEFAULT_PORT = pyPort // 添加端口到环境变量
+  env.DEFAULT_PORT = pyPort
   if (app.isPackaged) {
     env.UI_DIST_DIR = path.join(process.resourcesPath, 'react', 'dist')
     env.USER_DATA_DIR = app.getPath('userData')
     env.IS_PACKAGED = '1'
   }
 
-  // Set BASE_API_URL based on environment
   env.BASE_API_URL =
     process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://jaaz.app'
   console.log('BASE_API_URL:', env.BASE_API_URL)
 
-  // Apply proxy settings and get environment variables
   try {
     const proxyEnvVars = await settingsService.getProxyEnvironmentVariables()
-
-    // Merge proxy environment variables into env
     Object.assign(env, proxyEnvVars)
   } catch (error) {
     console.error('Failed to get proxy environment variables:', error)
   }
 
-  // Determine the Python executable path (considering packaged app)
   const isWindows = process.platform === 'win32'
+  // 开发模式优先使用项目虚拟环境，确保后端依赖完整。
+  const devVenvPython = isWindows
+    ? path.join(appRoot, 'server', '.venv', 'Scripts', 'python.exe')
+    : path.join(appRoot, 'server', '.venv', 'bin', 'python')
   const pythonExecutable = app.isPackaged
     ? path.join(process.resourcesPath, 'server', 'dist', 'main', isWindows ? 'main.exe' : 'main')
-    : 'python'
-  console.log('Resolved Python executable:', pythonExecutable)
-
-  const fs = require('fs')
-
-  console.log('Exists?', fs.existsSync(pythonExecutable))
-
-  // fs.chmodSync(pythonExecutable, "755");
-
-  console.log('Python executable path:', pythonExecutable)
+    : fs.existsSync(devVenvPython) ? devVenvPython : 'python'
   console.log('Python executable exists?', fs.existsSync(pythonExecutable))
-  console.log('env:', env)
   const scriptPath = path.join(__dirname, '../server/main.py')
 
-  // Start the FastAPI process
+  pyStartError = null
   pyProc = spawn(
     pythonExecutable,
-    app.isPackaged ? [`--port`, pyPort] : [scriptPath, `--port`, pyPort],
+    app.isPackaged ? ['--port', String(pyPort)] : [scriptPath, '--port', String(pyPort)],
     { env: env }
   )
 
-  // Log output to logStream (shared with console.log)
   pyProc.stdout.on('data', (data) => {
-    const log = `[${new Date().toISOString()}][PYTHON stdout] ${data}`
+    const log = '[' + new Date().toISOString() + '][PYTHON stdout] ' + data
     logStream.write(log)
-    process.stdout.write(log) // optional: echo to terminal if running from CLI
+    process.stdout.write(log)
   })
 
   pyProc.stderr.on('data', (data) => {
-    const log = `[${new Date().toISOString()}][PYTHON stderr] ${data}`
-    logStream.write(log)
-    process.stderr.write(log) // optional: echo to terminal if running from CLI
-  })
-
-  // Optional: log if spawn fails
-  pyProc.on('error', (err) => {
-    const log = `[${new Date().toISOString()}][PYTHON spawn error] ${err.toString()}\n`
+    const log = '[' + new Date().toISOString() + '][PYTHON stderr] ' + data
     logStream.write(log)
     process.stderr.write(log)
   })
 
-  // Optional: log process exit
+  pyProc.on('error', (err) => {
+    pyStartError = err
+    const log = '[' + new Date().toISOString() + '][PYTHON spawn error] ' + err.toString() + '\n'
+    logStream.write(log)
+    process.stderr.write(log)
+  })
+
   pyProc.on('exit', (code, signal) => {
-    const log = `[${new Date().toISOString()}][PYTHON exited] code=${code}, signal=${signal}\n`
+    const log = '[' + new Date().toISOString() + '][PYTHON exited] code=' + code + ', signal=' + signal + '\n'
     logStream.write(log)
   })
 
   return pyPort
+}
+
+const waitForPythonApi = async (port, timeoutMs = 120000) => {
+  const deadline = Date.now() + timeoutMs
+  let lastError = 'no response'
+
+  while (Date.now() < deadline) {
+    if (pyStartError) {
+      throw new Error('Failed to launch the Python backend: ' + pyStartError.message)
+    }
+    if (pyProc && pyProc.exitCode !== null && pyProc.exitCode !== undefined) {
+      throw new Error('Python backend exited before becoming ready (code ' + pyProc.exitCode + ').')
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:' + port, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (response.ok) return
+      lastError = 'HTTP ' + response.status
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+
+  throw new Error('Python backend did not become ready within ' + timeoutMs / 1000 + ' seconds (' + lastError + ').')
 }
 
 // Add these handlers before app.whenReady()
@@ -383,24 +406,13 @@ if (!gotTheLock) {
 
     // Start Python API in both development and production
     const pyPort = await startPythonApi()
-
-    while (true) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      // wait for the server to start
-      let status = await fetch(`http://127.0.0.1:${pyPort}`)
-        .then((res) => {
-          return res.ok
-        })
-        .catch((err) => {
-          console.error(err)
-          return false
-        })
-      if (status) {
-        break
-      }
-    }
-
+    await waitForPythonApi(pyPort)
     createWindow(pyPort)
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('Jaaz startup failed:', message)
+    dialog.showErrorBox('Jaaz startup failed', message)
+    app.quit()
   })
 }
 

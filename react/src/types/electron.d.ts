@@ -25,7 +25,7 @@ interface ElectronAPI {
   restartAndInstall: () => Promise<void>
   onUpdateDownloaded: (callback: (info: UpdateInfo) => void) => void
   removeUpdateDownloadedListener: () => void
-  // Auth methods
+  // 外部浏览器打开链接
   openBrowserUrl: (url: string) => Promise<{ success: boolean; error?: string }>
 }
 

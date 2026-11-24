@@ -1,3 +1,4 @@
+import { AuthGate } from '@/components/auth/AuthGate'
 import { SocketProvider } from '@/contexts/socket'
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
@@ -14,11 +15,13 @@ if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
     <StrictMode>
-      <PostHogProvider apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY} options={options}>
-        <SocketProvider>
-          <App />
-        </SocketProvider>
-      </PostHogProvider>
+      <AuthGate>
+        <PostHogProvider apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY} options={options}>
+          <SocketProvider>
+            <App />
+          </SocketProvider>
+        </PostHogProvider>
+      </AuthGate>
     </StrictMode>
   )
 }

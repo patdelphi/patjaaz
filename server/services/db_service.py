@@ -65,10 +65,10 @@ class DatabaseService:
             return [dict(row) for row in rows]
 
     async def create_chat_session(self, id: str, model: str, provider: str, canvas_id: str, title: Optional[str] = None):
-        """Save a new chat session"""
+        """创建聊天会话；重试时忽略已存在的相同会话 ID。"""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
-                INSERT INTO chat_sessions (id, model, provider, canvas_id, title)
+                INSERT OR IGNORE INTO chat_sessions (id, model, provider, canvas_id, title)
                 VALUES (?, ?, ?, ?, ?)
             """, (id, model, provider, canvas_id, title))
             await db.commit()
@@ -129,12 +129,13 @@ class DatabaseService:
     async def save_canvas_data(self, id: str, data: str, thumbnail: str = None):
         """Save canvas data"""
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
+            cursor = await db.execute("""
                 UPDATE canvases 
                 SET data = ?, thumbnail = ?, updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
                 WHERE id = ?
             """, (data, thumbnail, id))
             await db.commit()
+            return cursor.rowcount == 1
 
     async def get_canvas_data(self, id: str) -> Optional[Dict[str, Any]]:
         """Get canvas data"""

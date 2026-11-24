@@ -1,4 +1,9 @@
-import { saveCanvas } from '@/api/canvas'
+import { getCanvas, saveCanvas } from '@/api/canvas'
+import {
+  findNewPersistableImageIds,
+  getPersistableImageIds,
+} from '@/lib/canvasImagePersistence'
+import { queueCanvasSave } from '@/lib/canvasSaveQueue'
 import { useCanvas } from '@/contexts/canvas'
 import useDebounce from '@/hooks/use-debounce'
 import { useTheme } from '@/hooks/use-theme'
@@ -21,6 +26,7 @@ import {
   ExcalidrawInitialDataState,
 } from '@excalidraw/excalidraw/types'
 import { useCallback, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { VideoElement } from './VideoElement'
 
@@ -44,8 +50,9 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
   initialData,
 }) => {
   const { excalidrawAPI, setExcalidrawAPI } = useCanvas()
+  const saveErrorShownRef = useRef(false)
 
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation()
 
   // Immediate handler for UI updates (no debounce)
   const handleSelectionChange = (
@@ -73,16 +80,13 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
     }
   }
 
-  // Debounced handler for saving (performance optimization)
-  const handleSave = useDebounce(
-    (
+  const persistCanvasSnapshot = useCallback(
+    async (
       elements: Readonly<OrderedExcalidrawElement[]>,
       appState: AppState,
       files: BinaryFiles
     ) => {
-      if (elements.length === 0 || !appState) {
-        return
-      }
+      if (elements.length === 0 || !appState) return
 
       const data: CanvasData = {
         elements,
@@ -97,16 +101,51 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       const latestImage = elements
         .filter((element) => element.type === 'image')
         .sort((a, b) => b.updated - a.updated)[0]
-      if (latestImage) {
-        const file = files[latestImage.fileId!]
-        if (file) {
-          thumbnail = file.dataURL
-        }
+      if (latestImage?.type === 'image') {
+        const file = latestImage.fileId ? files[latestImage.fileId] : undefined
+        if (file?.dataURL) thumbnail = file.dataURL
       }
 
-      saveCanvas(canvasId, { data, thumbnail })
+      try {
+        await queueCanvasSave(canvasId, () =>
+          saveCanvas(canvasId, { data, thumbnail })
+        )
+        saveErrorShownRef.current = false
+      } catch (error) {
+        console.error('Failed to save canvas ' + canvasId, error)
+        if (!saveErrorShownRef.current) {
+          toast.error(t('canvas:messages.failedToSave'), {
+            description: error instanceof Error ? error.message : undefined,
+          })
+          saveErrorShownRef.current = true
+        }
+      }
+    },
+    [canvasId, t]
+  )
+
+  // 普通改动延迟合并保存；新增图片会在 onChange 中立即保存。
+  const handleSave = useDebounce(
+    (
+      elements: Readonly<OrderedExcalidrawElement[]>,
+      appState: AppState,
+      files: BinaryFiles
+    ) => {
+      void persistCanvasSnapshot(elements, appState, files)
     },
     1000
+  )
+
+  const knownImageIdsRef = useRef<Set<string>>(
+    new Set(
+      (initialData?.elements ?? [])
+        .filter(
+          (element): element is ExcalidrawImageElement =>
+            element.type === 'image' && !element.isDeleted
+        )
+        .filter((image) => Boolean(image.fileId && initialData?.files?.[image.fileId]?.dataURL))
+        .map((image) => image.id)
+    )
   )
 
   // Combined handler that calls both immediate and debounced functions
@@ -117,8 +156,22 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
   ) => {
     // Immediate UI updates
     handleSelectionChange(elements, appState)
-    // Debounced save operation
-    handleSave(elements, appState, files)
+
+    const newImageIds = findNewPersistableImageIds(
+      elements,
+      files,
+      knownImageIdsRef.current
+    )
+    knownImageIdsRef.current = new Set(getPersistableImageIds(elements, files))
+
+    if (newImageIds.length > 0) {
+      // 图片和对应文件都到齐后立即保存，不等待 1 秒防抖。
+      handleSave.cancel()
+      void persistCanvasSnapshot(elements, appState, files)
+    } else {
+      // 普通画布改动继续合并保存；组件卸载时由防抖钩子刷新最后一次改动。
+      handleSave(elements, appState, files)
+    }
   }
 
   const lastImagePosition = useRef<LastImagePosition | null>(
@@ -142,7 +195,6 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       excalidrawAPI.updateScene({
         appState: {
           viewBackgroundColor: '#121212',
-          gridColor: 'rgba(255, 255, 255, 0.1)',
         }
       })
     } else if (excalidrawAPI && theme === 'light') {
@@ -150,7 +202,6 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       excalidrawAPI.updateScene({
         appState: {
           viewBackgroundColor: '#ffffff',
-          gridColor: 'rgba(0, 0, 0, 0.1)',
         }
       })
     }
@@ -372,6 +423,37 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
     [addImageToExcalidraw, canvasId]
   )
 
+  const handleSyncGeneratedImages = useCallback(
+    async (event: { canvasId: string }) => {
+      if (event.canvasId !== canvasId || !excalidrawAPI) return
+
+      try {
+        const savedCanvas = await getCanvas(canvasId)
+        const existingIds = new Set(
+          excalidrawAPI.getSceneElements().map((element) => element.id)
+        )
+        const missingImages = savedCanvas.data.elements.filter(
+          (element) =>
+            element.type === 'image' &&
+            !element.isDeleted &&
+            !existingIds.has(element.id)
+        ) as ExcalidrawImageElement[]
+
+        for (const image of missingImages) {
+          // 已保存的画布图像可能没有关联文件，跳过无法恢复的元素。
+          if (!image.fileId) continue
+          const file = savedCanvas.data.files[image.fileId]
+          if (file) {
+            await addImageToExcalidraw(image, file)
+          }
+        }
+      } catch (error) {
+        console.error('Could not sync generated canvas images', error)
+      }
+    },
+    [addImageToExcalidraw, canvasId, excalidrawAPI]
+  )
+
   const handleVideoGenerated = useCallback(
     (videoData: ISocket.SessionVideoGeneratedEvent) => {
       console.log('👇 CanvasExcali received video_generated:', videoData)
@@ -391,50 +473,53 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
   useEffect(() => {
     eventBus.on('Socket::Session::ImageGenerated', handleImageGenerated)
     eventBus.on('Socket::Session::VideoGenerated', handleVideoGenerated)
+    eventBus.on('Canvas::SyncGeneratedImages', handleSyncGeneratedImages)
     return () => {
       eventBus.off('Socket::Session::ImageGenerated', handleImageGenerated)
       eventBus.off('Socket::Session::VideoGenerated', handleVideoGenerated)
+      eventBus.off('Canvas::SyncGeneratedImages', handleSyncGeneratedImages)
     }
-  }, [handleImageGenerated, handleVideoGenerated])
+  }, [handleImageGenerated, handleSyncGeneratedImages, handleVideoGenerated])
 
   return (
-    <Excalidraw
-      theme={customTheme as Theme}
-      langCode={i18n.language}
-      className={excalidrawClassName}
-      excalidrawAPI={(api) => {
-        setExcalidrawAPI(api)
-      }}
-      onChange={handleChange}
-      initialData={() => {
-        const data = initialData
-        console.log('👇initialData', data)
-        if (data?.appState) {
-          data.appState = {
-            ...data.appState,
-            collaborators: undefined!,
+    <div className={excalidrawClassName} style={{ width: '100%', height: '100%' }}>
+      <Excalidraw
+        theme={customTheme as Theme}
+        langCode={i18n.language}
+        excalidrawAPI={(api) => {
+          setExcalidrawAPI(api)
+        }}
+        onChange={handleChange}
+        initialData={() => {
+          const data = initialData
+          console.log('👇initialData', data)
+          if (data?.appState) {
+            data.appState = {
+              ...data.appState,
+              collaborators: undefined!,
+            }
           }
-        }
-        return data || null
-      }}
-      renderEmbeddable={renderEmbeddable}
-      // Allow all URLs for embeddable content
-      validateEmbeddable={(url: string) => {
-        console.log('👇 Validating embeddable URL:', url)
-        // Allow all URLs - return true for everything
-        return true
-      }}
-      // Ensure interactive mode is enabled
-      viewModeEnabled={false}
-      zenModeEnabled={false}
-      // Allow element manipulation
-      onPointerUpdate={(payload) => {
-        // Minimal logging - only log significant pointer events
-        if (payload.button === 'down' && Math.random() < 0.05) {
-          // console.log('👇 Pointer down on:', payload.pointer.x, payload.pointer.y)
-        }
-      }}
-    />
+          return data || null
+        }}
+        renderEmbeddable={renderEmbeddable}
+        // Allow all URLs for embeddable content
+        validateEmbeddable={(url: string) => {
+          console.log('👇 Validating embeddable URL:', url)
+          // Allow all URLs - return true for everything
+          return true
+        }}
+        // Ensure interactive mode is enabled
+        viewModeEnabled={false}
+        zenModeEnabled={false}
+        // Allow element manipulation
+        onPointerUpdate={(payload) => {
+          // Minimal logging - only log significant pointer events
+          if (payload.button === 'down' && Math.random() < 0.05) {
+            // console.log('👇 Pointer down on:', payload.pointer.x, payload.pointer.y)
+          }
+        }}
+      />
+    </div>
   )
 }
 

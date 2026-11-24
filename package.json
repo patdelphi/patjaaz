@@ -9,7 +9,7 @@
     "dev:react": "cd react && npm run dev",
     "dev:electron": "cross-env NODE_ENV=development npx electron electron/main.js",
     "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
-    "start:frontend": "cd frontend && npm run dev",
+    "start:frontend": "cd react && npm run dev",
     "start:electron": "npx electron electron/main.js",
     "build:electron": "electron-builder",
     "build:win": "electron-builder --win",

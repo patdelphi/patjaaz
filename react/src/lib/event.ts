@@ -4,6 +4,7 @@ import mitt from 'mitt'
 export type TCanvasAddImagesToChatEvent = {
   fileId: string
   base64?: string
+  sourceUrl?: string
   width: number
   height: number
 }[]
@@ -45,6 +46,7 @@ export type TEvents = {
   // ********** Canvas events - Start **********
   'Canvas::AddImagesToChat': TCanvasAddImagesToChatEvent
   'Canvas::MagicGenerate': TCanvasMagicGenerateEvent
+  'Canvas::SyncGeneratedImages': { canvasId: string }
   // ********** Canvas events - End **********
 
   // ********** Material events - Start **********

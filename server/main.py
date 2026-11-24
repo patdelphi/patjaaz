@@ -7,14 +7,14 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 print('Importing websocket_router')
 from routers.websocket_router import *  # DO NOT DELETE THIS LINE, OTHERWISE, WEBSOCKET WILL NOT WORK
 print('Importing routers')
-from routers import config_router, image_router, root_router, workspace, canvas, ssl_test, chat_router, settings, tool_confirmation
+from routers import auth as auth_router, config_router, image_router, root_router, workspace, canvas, ssl_test, chat_router, settings, tool_confirmation
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import argparse
 from contextlib import asynccontextmanager
 from starlette.types import Scope
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 import socketio # type: ignore
 print('Importing websocket_state')
 from services.websocket_state import sio
@@ -24,6 +24,7 @@ print('Importing config_service')
 from services.config_service import config_service
 print('Importing tool_service')
 from services.tool_service import tool_service
+from services.auth_service import SESSION_COOKIE_NAME, auth_service
 
 async def initialize():
     print('Initializing config_service')
@@ -36,6 +37,7 @@ root_dir = os.path.dirname(__file__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # onstartup
+    auth_service.require_configured()
     # TODO: Check if there will be racing conditions when user send chat request but tools and models are not initialized yet.
     await initialize()
     await tool_service.initialize()
@@ -45,8 +47,22 @@ async def lifespan(app: FastAPI):
 print('Creating FastAPI app')
 app = FastAPI(lifespan=lifespan)
 
+
+@app.middleware("http")
+async def require_access_code(request: Request, call_next):
+    """保护所有 API；登录状态检查、登录和退出接口保持公开。"""
+    path = request.url.path
+    is_auth_route = path == "/api/auth" or path.startswith("/api/auth/")
+    is_api_route = path == "/api" or path.startswith("/api/")
+    if is_api_route and not is_auth_route:
+        session_token = request.cookies.get(SESSION_COOKIE_NAME)
+        if not auth_service.is_valid_session(session_token):
+            return JSONResponse(status_code=401, content={"detail": "Login required"})
+    return await call_next(request)
+
 # Include routers
 print('Including routers')
+app.include_router(auth_router.router)
 app.include_router(config_router.router)
 app.include_router(settings.router)
 app.include_router(root_router.router)

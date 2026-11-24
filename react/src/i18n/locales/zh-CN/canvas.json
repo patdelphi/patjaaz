@@ -16,6 +16,7 @@
     "canvasDeleted": "画布删除成功",
     "canvasExported": "画布导出成功",
     "canvasImported": "画布导入成功",
+    "failedToSave": "画布保存失败，修改可能尚未保存",
     "failedToRename": "重命名画布失败",
     "failedToDelete": "删除画布失败",
     "failedToCreateFile": "创建文件失败",
@@ -44,7 +45,11 @@
   },
   "popbar": {
     "addToChat": "添加到聊天",
-    "magicGenerate": "✨ 魔法生成"
+    "magicGenerate": "✨ 魔法生成",
+    "textBackground": "文字底色",
+    "applyTextBackground": "设置文字底色",
+    "customTextBackground": "自定义底色",
+    "removeTextBackground": "移除底色"
   },
   "myAssets": "我的素材",
   "selectAFolder": "选择文件夹",

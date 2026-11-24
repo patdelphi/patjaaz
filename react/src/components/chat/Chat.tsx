@@ -1,7 +1,8 @@
-import { sendMessages } from '@/api/chat'
+import { getChatSession, sendMessages } from '@/api/chat'
 import Blur from '@/components/common/Blur'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { eventBus, TEvents } from '@/lib/event'
+import { TaskStatusSnapshot } from '@/lib/chatTaskProgress'
 import ChatMagicGenerator from './ChatMagicGenerator'
 import {
   AssistantMessage,
@@ -33,16 +34,11 @@ import ToolCallTag from './Message/ToolCallTag'
 import SessionSelector from './SessionSelector'
 import ChatSpinner from './Spinner'
 import ToolcallProgressUpdate from './ToolcallProgressUpdate'
-import ShareTemplateDialog from './ShareTemplateDialog'
 
 import { useConfigs } from '@/contexts/configs'
 import 'react-photo-view/dist/react-photo-view.css'
 import { DEFAULT_SYSTEM_PROMPT } from '@/constants'
 import { ModelInfo, ToolInfo } from '@/api/model'
-import { Button } from '@/components/ui/button'
-import { Share2 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
-import { useQueryClient } from '@tanstack/react-query'
 import MixedContent, { MixedContentImages, MixedContentText } from './Message/MixedContent'
 
 
@@ -62,9 +58,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const { t } = useTranslation()
   const [session, setSession] = useState<Session | null>(null)
   const { initCanvas, setInitCanvas } = useConfigs()
-  const { authStatus } = useAuth()
-  const [showShareDialog, setShowShareDialog] = useState(false)
-  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (sessionList.length > 0) {
@@ -84,6 +77,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [pending, setPending] = useState<PendingType>(
     initCanvas ? 'text' : false
   )
+  const [taskSessionId, setTaskSessionId] = useState<string | null>(null)
   const mergedToolCallIds = useRef<string[]>([])
 
   const sessionId = session?.id ?? searchSessionId
@@ -109,7 +103,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }, 200)
   }, [])
 
-  const mergeToolCallResult = (messages: Message[]) => {
+  const mergeToolCallResult = useCallback((messages: Message[]) => {
     const messagesWithToolCallResult = messages.map((message, index) => {
       if (message.role === 'assistant' && message.tool_calls) {
         for (const toolCall of message.tool_calls) {
@@ -130,7 +124,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     })
 
     return messagesWithToolCallResult
-  }
+  }, [])
 
   const handleDelta = useCallback(
     (data: TEvents['Socket::Session::Delta']) => {
@@ -421,29 +415,63 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleDone = useCallback(
     (data: TEvents['Socket::Session::Done']) => {
-      if (data.session_id && data.session_id !== sessionId) {
+      const activeSessionId = taskSessionId || sessionId
+      if (data.session_id && data.session_id !== activeSessionId) {
         return
       }
 
       setPending(false)
+      setTaskSessionId(null)
       scrollToBottom()
 
-      // 聊天输出完毕后更新余额
-      if (authStatus.is_logged_in) {
-        queryClient.invalidateQueries({ queryKey: ['balance'] })
-      }
     },
-    [sessionId, scrollToBottom, authStatus.is_logged_in, queryClient]
+    [sessionId, scrollToBottom, taskSessionId]
   )
 
-  const handleError = useCallback((data: TEvents['Socket::Session::Error']) => {
-    setPending(false)
-    toast.error('Error: ' + data.error, {
-      closeButton: true,
-      duration: 3600 * 1000,
-      style: { color: 'red' },
-    })
-  }, [])
+  const handleError = useCallback(
+    (data: TEvents['Socket::Session::Error']) => {
+      const activeSessionId = taskSessionId || sessionId
+      if (data.session_id && data.session_id !== activeSessionId) {
+        return
+      }
+
+      setPending(false)
+      setTaskSessionId(null)
+      toast.error('Error: ' + data.error, {
+        closeButton: true,
+        duration: 3600 * 1000,
+        style: { color: 'red' },
+      })
+    },
+    [sessionId, taskSessionId]
+  )
+
+  const handleRecoveredTaskFinished = useCallback(
+    async (status: TaskStatusSnapshot) => {
+      const finishedSessionId = taskSessionId || sessionId
+      try {
+        if (finishedSessionId) {
+          const savedMessages = await getChatSession(finishedSessionId)
+          setMessages(mergeToolCallResult(savedMessages))
+        }
+        eventBus.emit('Canvas::SyncGeneratedImages', { canvasId })
+
+        if (status.terminal_state === 'failed') {
+          toast.error('Error: ' + (status.error || 'Task failed'))
+        } else if (status.terminal_state === 'unknown') {
+          toast.info('Connection was interrupted. Saved results were restored.')
+        }
+      } catch (error) {
+        console.error('Could not restore completed chat results', error)
+        toast.error('Could not reload completed task results')
+      } finally {
+        setPending(false)
+        setTaskSessionId(null)
+        scrollToBottom()
+      }
+    },
+    [canvasId, mergeToolCallResult, scrollToBottom, sessionId, taskSessionId]
+  )
 
   const handleInfo = useCallback((data: TEvents['Socket::Session::Info']) => {
     toast.info(data.info, {
@@ -525,13 +553,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
 
     scrollToBottom()
-  }, [sessionId, scrollToBottom, setInitCanvas])
+  }, [mergeToolCallResult, sessionId, scrollToBottom, setInitCanvas])
 
   useEffect(() => {
     initChat()
   }, [sessionId, initChat])
 
   const onSelectSession = (sessionId: string) => {
+    sessionIdRef.current = sessionId
     setSession(sessionList.find((s) => s.id === sessionId) || null)
     window.history.pushState(
       {},
@@ -550,36 +579,67 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       provider: session?.provider || 'openai',
     }
 
+    sessionIdRef.current = newSession.id
     setSessionList((prev) => [...prev, newSession])
     onSelectSession(newSession.id)
   }
 
   const onSendMessages = useCallback(
     (data: Message[], configs: { textModel: Model; toolList: ToolInfo[] }) => {
+      const activeSessionId = sessionId || sessionIdRef.current || nanoid()
+      sessionIdRef.current = activeSessionId
+      setTaskSessionId(activeSessionId)
       setPending('text')
       setMessages(data)
 
-      sendMessages({
-        sessionId: sessionId!,
+      if (!sessionId) {
+        const newSession: Session = {
+          id: activeSessionId,
+          title: t('chat:newChat'),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          model: configs.textModel.model || 'gpt-4o',
+          provider: configs.textModel.provider || 'openai',
+        }
+        setSession(newSession)
+        setSessionList((prev) =>
+          prev.some((item) => item.id === activeSessionId)
+            ? prev
+            : [...prev, newSession]
+        )
+      }
+
+      void sendMessages({
+        sessionId: activeSessionId,
         canvasId: canvasId,
         newMessages: data,
         textModel: configs.textModel,
         toolList: configs.toolList,
         systemPrompt:
           localStorage.getItem('system_prompt') || DEFAULT_SYSTEM_PROMPT,
+      }).catch((error: unknown) => {
+        console.error('Failed to submit chat task', error)
+        if (sessionIdRef.current === activeSessionId) {
+          setPending(false)
+          setTaskSessionId(null)
+          toast.error(
+            `Could not start task: ${error instanceof Error ? error.message : String(error)}`,
+            { closeButton: true }
+          )
+        }
       })
 
-      if (searchSessionId !== sessionId) {
+      if (searchSessionId !== activeSessionId) {
         window.history.pushState(
           {},
           '',
-          `/canvas/${canvasId}?sessionId=${sessionId}`
+          `/canvas/${canvasId}?sessionId=${activeSessionId}`
         )
       }
 
       scrollToBottom()
     },
-    [canvasId, sessionId, searchSessionId, scrollToBottom]
+    [canvasId, sessionId, searchSessionId, scrollToBottom, setSessionList, t]
   )
 
   const handleCancelChat = useCallback(() => {
@@ -602,16 +662,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
 
           {/* Share Template Button */}
-          {/* {authStatus.is_logged_in && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-2 shrink-0"
-              onClick={() => setShowShareDialog(true)}
-            >
-              <Share2 className="h-4 w-4 mr-1" />
-            </Button>
-          )} */}
 
           <Blur className='absolute top-0 left-0 right-0 h-full -z-1' />
         </header>
@@ -712,8 +762,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               ))}
               {pending && <ChatSpinner pending={pending} />}
-              {pending && sessionId && (
-                <ToolcallProgressUpdate sessionId={sessionId} />
+              {pending && (
+                <ToolcallProgressUpdate
+                  sessionId={taskSessionId || sessionId || ''}
+                  onTaskFinished={handleRecoveredTaskFinished}
+                />
               )}
             </div>
           ) : (
@@ -758,15 +811,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           />
         </div>
       </div>
-
-      {/* Share Template Dialog */}
-      <ShareTemplateDialog
-        open={showShareDialog}
-        onOpenChange={setShowShareDialog}
-        canvasId={canvasId}
-        sessionId={sessionId || ''}
-        messages={messages}
-      />
     </PhotoProvider>
   )
 }

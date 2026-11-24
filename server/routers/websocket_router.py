@@ -1,8 +1,16 @@
 # routers/websocket_router.py
+from http.cookies import SimpleCookie
+from services.auth_service import SESSION_COOKIE_NAME, auth_service
 from services.websocket_state import sio, add_connection, remove_connection
 
 @sio.event
 async def connect(sid, environ, auth):
+    cookies = SimpleCookie()
+    cookies.load(environ.get("HTTP_COOKIE", ""))
+    session_cookie = cookies.get(SESSION_COOKIE_NAME)
+    if not session_cookie or not auth_service.is_valid_session(session_cookie.value):
+        return False
+
     print(f"Client {sid} connected")
     
     user_info = auth or {}

@@ -69,11 +69,9 @@ const ModelSelectorV3: React.FC<ModelSelectorV3Props> = ({
 
   // Sort providers to put Jaaz first
   const sortProviders = <T,>(grouped: { [provider: string]: T[] }) => {
-    const sortedEntries = Object.entries(grouped).sort(([a], [b]) => {
-      if (a === 'jaaz') return -1
-      if (b === 'jaaz') return 1
-      return a.localeCompare(b)
-    })
+    const sortedEntries = Object.entries(grouped).sort(([a], [b]) =>
+      a.localeCompare(b)
+    )
     return Object.fromEntries(sortedEntries)
   }
 

@@ -1,10 +1,8 @@
 // import InstallComfyUIDialog from '@/components/comfyui/InstallComfyUIDialog'
 import UpdateNotificationDialog from '@/components/common/UpdateNotificationDialog'
 import SettingsDialog from '@/components/settings/dialog'
-import { LoginDialog } from '@/components/auth/LoginDialog'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { ConfigsProvider } from '@/contexts/configs'
-import { AuthProvider } from '@/contexts/AuthContext'
 import { useTheme } from '@/hooks/use-theme'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
@@ -104,7 +102,6 @@ function App() {
         client={queryClient}
         persistOptions={{ persister }}
       >
-        <AuthProvider>
           <ConfigsProvider>
             <div className="app-container">
               <RouterProvider router={router} />
@@ -118,11 +115,8 @@ function App() {
               {/* Settings Dialog */}
               <SettingsDialog />
 
-              {/* Login Dialog */}
-              <LoginDialog />
             </div>
           </ConfigsProvider>
-        </AuthProvider>
       </PersistQueryClientProvider>
       <Toaster position="bottom-center" richColors />
     </ThemeProvider>

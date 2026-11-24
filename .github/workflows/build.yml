@@ -55,7 +55,7 @@ jobs:
           npx vite build
 
       - name: Install Apple certificate
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && github.event_name == 'push'
         run: |
           echo "$CERTIFICATE_P12" | base64 --decode > certificate.p12
           security create-keychain -p "" build.keychain
@@ -68,12 +68,12 @@ jobs:
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
 
       - name: Set env for mac signing
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && github.event_name == 'push'
         run: echo "CSC_LINK=certificate.p12" >> $GITHUB_ENV && echo "CSC_KEY_PASSWORD=${{ secrets.CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
 
       - name: Build and Package Electron app
         run: |
-          npx electron-builder --${{ matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish always
+          npx electron-builder --${{ matrix.os == 'macos-latest' && 'mac' || 'win' }} --${{ matrix.arch }} --publish ${{ github.event_name == 'push' && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}

@@ -40,6 +40,7 @@ from services.db_service import db_service
 from services.websocket_service import broadcast_session_update, send_to_websocket
 
 from .utils.comfyui import ComfyUIWorkflowRunner
+from utils.comfyui_history import require_generation_outputs
 from tools.video_generation.video_canvas_utils import generate_new_video_element
 
 
@@ -195,6 +196,8 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             extra_kwargs["ctx"] = ctx
 
             outputs = await generator.generate(**extra_kwargs)
+            # ComfyUI 没返回文件时直接报错，避免画布空保存却向用户报告成功。
+            require_generation_outputs(outputs)
             # if outputs is not a list of list, make it a list of list
             if not isinstance(outputs, list) or (
                 outputs and not isinstance(outputs[0], (list, tuple))

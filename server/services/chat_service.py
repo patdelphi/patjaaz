@@ -10,7 +10,12 @@ from models.tool_model import ToolInfoJson
 from services.db_service import db_service
 from services.langgraph_service import langgraph_multi_agent
 from services.websocket_service import send_to_websocket
-from services.stream_service import add_stream_task, remove_stream_task
+from services.stream_service import (
+    add_stream_task,
+    release_stream_session,
+    remove_stream_task,
+    reserve_stream_session,
+)
 from models.config_model import ModelInfo
 
 
@@ -46,30 +51,69 @@ async def handle_chat(data: Dict[str, Any]) -> None:
     # TODO: save and fetch system prompt from db or settings config
     system_prompt: Optional[str] = data.get('system_prompt')
 
-    # If there is only one message, create a new chat session
-    if len(messages) == 1:
-        # create new session
-        prompt = messages[0].get('content', '')
-        # TODO: Better way to determin when to create new chat session.
-        await db_service.create_chat_session(session_id, text_model.get('model'), text_model.get('provider'), canvas_id, (prompt[:200] if isinstance(prompt, str) else ''))
+    # 任务运行中收到相同会话的重复提交时直接复用当前任务。
+    if not reserve_stream_session(session_id):
+        return
 
-    await db_service.create_message(session_id, messages[-1].get('role', 'user'), json.dumps(messages[-1])) if len(messages) > 0 else None
-
-    # Create and start langgraph_agent task for chat processing
-    task = asyncio.create_task(langgraph_multi_agent(
-        messages, canvas_id, session_id, text_model, tool_list, system_prompt))
-
-    # Register the task in stream_tasks (for possible cancellation)
-    add_stream_task(session_id, task)
     try:
-        # Await completion of the langgraph_agent task
-        await task
-    except asyncio.exceptions.CancelledError:
-        print(f"🛑Session {session_id} cancelled during stream")
+        # If there is only one message, create a new chat session
+        if len(messages) == 1:
+            prompt = messages[0].get('content', '')
+            await db_service.create_chat_session(
+                session_id,
+                text_model.get('model'),
+                text_model.get('provider'),
+                canvas_id,
+                prompt[:200] if isinstance(prompt, str) else '',
+            )
+
+        if messages:
+            await db_service.create_message(
+                session_id, messages[-1].get('role', 'user'), json.dumps(messages[-1])
+            )
+
+        # 模型和 ComfyUI 任务可能持续数分钟，交给后台执行，避免代理关闭长时间 HTTP 请求。
+        task = asyncio.create_task(
+            _run_chat_task(
+                messages, canvas_id, session_id, text_model, tool_list, system_prompt
+            ),
+            name=f"chat:{session_id}",
+        )
+        if not add_stream_task(session_id, task):
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
     finally:
-        # Always remove the task from stream_tasks after completion/cancellation
-        remove_stream_task(session_id)
-        # Notify frontend WebSocket that chat processing is done
+        release_stream_session(session_id)
+
+
+async def _run_chat_task(
+    messages: List[Dict[str, Any]],
+    canvas_id: str,
+    session_id: str,
+    text_model: ModelInfo,
+    tool_list: List[ToolInfoJson],
+    system_prompt: Optional[str],
+) -> None:
+    """后台运行聊天智能体，并通过 Socket.IO 通知前端完成或失败。"""
+    terminal_state = "completed"
+    error_message: Optional[str] = None
+    try:
+        await langgraph_multi_agent(
+            messages, canvas_id, session_id, text_model, tool_list, system_prompt
+        )
+    except asyncio.CancelledError:
+        terminal_state = "cancelled"
+        print(f"🛑Session {session_id} cancelled during stream")
+    except Exception as error:
+        terminal_state = "failed"
+        error_message = str(error)
+        print(f"Chat session {session_id} failed: {error}")
+        await send_to_websocket(session_id, {
+            'type': 'error',
+            'error': error_message,
+        })
+    finally:
+        remove_stream_task(session_id, terminal_state, error_message)
         await send_to_websocket(session_id, {
             'type': 'done'
         })

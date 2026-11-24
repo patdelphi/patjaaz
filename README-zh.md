@@ -95,10 +95,15 @@ AI 还可以让你在提交回复前进行确认：
 
 ## 开发指南
 
+需要 Node.js 20、Python 3.12 或更高版本。在仓库根目录安装依赖并启动开发版：
+
 ```bash
-cd react && npm i
-cd react && npm run dev
-cd server && python main.py
+npm install
+npm --prefix react install --force
+python -m pip install -r server/requirements.txt
+npm run dev
 ```
+
+首次启动前，将 `.env.example` 复制为 `.env`，设置 `JAAZ_ACCESS_CODE`。登录 Jaaz 时输入该访问码。
 
 ---

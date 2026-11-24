@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 #from routers.agent import chat
 from services.chat_service import handle_chat
 from services.db_service import db_service
@@ -29,7 +29,9 @@ async def get_canvas(id: str):
 async def save_canvas(id: str, request: Request):
     payload = await request.json()
     data_str = json.dumps(payload['data'])
-    await db_service.save_canvas_data(id, data_str, payload['thumbnail'])
+    saved = await db_service.save_canvas_data(id, data_str, payload['thumbnail'])
+    if not saved:
+        raise HTTPException(status_code=404, detail="Canvas not found")
     return {"id": id }
 
 @router.post("/{id}/rename")

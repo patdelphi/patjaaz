@@ -5,7 +5,8 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     testTimeout: 15000,
-    include: ['**/*.test.js'],
+    // 仅收集 React 单元测试；Electron 安装器测试脚本会访问外网或真实用户目录。
+    include: ['react/test/**/*.test.js', 'react/test/**/*.test.jsx'],
     exclude: ['node_modules/**', 'dist/**'],
     threads: false,
     isolate: false,
@@ -18,7 +19,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': new URL('./electron', import.meta.url).pathname,
+      '@': new URL('./react/src', import.meta.url).pathname,
     },
   },
 })

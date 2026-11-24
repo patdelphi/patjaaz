@@ -1,5 +1,6 @@
 import { useCanvas } from '@/contexts/canvas'
 import { TCanvasAddImagesToChatEvent } from '@/lib/event'
+import { normalizeCanvasImageForChat } from '@/lib/canvasChatImage'
 import {
   ExcalidrawImageElement,
   OrderedExcalidrawElement,
@@ -14,9 +15,11 @@ const CanvasPopbarWrapper = () => {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [showAddToChat, setShowAddToChat] = useState(false)
   const [showMagicGenerate, setShowMagicGenerate] = useState(false)
+  const [showTextBackground, setShowTextBackground] = useState(false)
 
   const selectedImagesRef = useRef<TCanvasAddImagesToChatEvent>([])
   const selectedElementsRef = useRef<OrderedExcalidrawElement[]>([])
+  const selectedTextElementsRef = useRef<OrderedExcalidrawElement[]>([])
 
   excalidrawAPI?.onChange((elements, appState, files) => {
     const selectedIds = appState.selectedElementIds
@@ -24,41 +27,42 @@ const CanvasPopbarWrapper = () => {
       setPos(null)
       setShowAddToChat(false)
       setShowMagicGenerate(false)
+      setShowTextBackground(false)
       return
     }
 
     const selectedImages = elements.filter(
       (element) => element.type === 'image' && selectedIds[element.id]
     ) as ExcalidrawImageElement[]
+    const selectedTextElements = elements.filter(
+      (element) => element.type === 'text' && selectedIds[element.id]
+    ) as OrderedExcalidrawElement[]
+    selectedElementsRef.current = elements.filter(
+      (element) => selectedIds[element.id] && element.index !== null
+    ) as OrderedExcalidrawElement[]
+    selectedTextElementsRef.current = selectedTextElements
+    setShowTextBackground(selectedTextElements.length > 0)
 
     // 判断是否显示添加到对话按钮：选中图片元素
     const hasSelectedImages = selectedImages.length > 0
-    setShowAddToChat(hasSelectedImages)
 
     // 判断是否显示魔法生成按钮：选中2个以上元素（包含所有类型）
     const selectedCount = Object.keys(selectedIds).length
     setShowMagicGenerate(selectedCount >= 2)
 
     // 如果既没有选中图片，也没有满足魔法生成条件，隐藏弹窗
-    if (!hasSelectedImages && selectedCount < 2) {
+    if (!hasSelectedImages && selectedCount < 2 && selectedTextElements.length === 0) {
       setPos(null)
       return
     }
 
     // 处理选中的图片数据
-    selectedImagesRef.current = selectedImages
-      .filter((image) => image.fileId)
-      .map((image) => {
-        const file = files[image.fileId!]
-        const isBase64 = file.dataURL.startsWith('data:')
-        const id = isBase64 ? file.id : file.dataURL.split('/').at(-1)!
-        return {
-          fileId: id,
-          base64: isBase64 ? file.dataURL : undefined,
-          width: image.width,
-          height: image.height,
-        }
-      })
+    selectedImagesRef.current = selectedImages.flatMap((image) => {
+      const file = image.fileId ? files[image.fileId] : undefined
+      const attachment = normalizeCanvasImageForChat(image, file)
+      return attachment ? [attachment] : []
+    })
+    setShowAddToChat(selectedImagesRef.current.length > 0)
 
     // 处理选中的元素数据
     selectedElementsRef.current = elements.filter(
@@ -107,13 +111,15 @@ const CanvasPopbarWrapper = () => {
   return (
     <div className='absolute left-0 bottom-0 w-full h-full z-20 pointer-events-none'>
       <AnimatePresence>
-        {pos && (showAddToChat || showMagicGenerate) && (
+        {pos && (showAddToChat || showMagicGenerate || showTextBackground) && (
           <CanvasPopbarContainer
             pos={pos}
             selectedImages={selectedImagesRef.current}
             selectedElements={selectedElementsRef.current}
+            selectedTextElements={selectedTextElementsRef.current}
             showAddToChat={showAddToChat}
             showMagicGenerate={showMagicGenerate}
+            showTextBackground={showTextBackground}
           />
         )}
       </AnimatePresence>

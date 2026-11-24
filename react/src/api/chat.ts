@@ -29,8 +29,16 @@ export const sendMessages = async (payload: {
       system_prompt: payload.systemPrompt,
     }),
   })
-  const data = await response.json()
-  return data as Message[]
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const message =
+      (typeof data?.detail === 'string' && data.detail) ||
+      (typeof data?.error === 'string' && data.error) ||
+      response.statusText ||
+      'Request failed'
+    throw new Error(message)
+  }
+  return data as { status: string; session_id?: string }
 }
 
 export const cancelChat = async (sessionId: string) => {

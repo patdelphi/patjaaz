@@ -1,20 +1,13 @@
 import React, { useState } from 'react'
+import { parseWritePlanSteps } from '@/lib/writePlan'
 import { ChevronDown, ChevronRight, FileText, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 export default function WritePlanToolCall({ args }: { args: string }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const { t } = useTranslation()
 
-  let parsedArgs: {
-    steps: {
-      title: string
-      description: string
-    }[]
-  } | null = null
+  const steps = parseWritePlanSteps(args)
 
-  try {
-    parsedArgs = JSON.parse(args)
-  } catch (error) {}
 
   return (
     <div className="bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 rounded-md shadow-sm overflow-hidden">
@@ -33,9 +26,9 @@ export default function WritePlanToolCall({ args }: { args: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {parsedArgs && (
+          {steps.length > 0 && (
             <div className="bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 text-xs px-2 py-0.5 rounded-full">
-              {parsedArgs.steps.length}
+              {steps.length}
             </div>
           )}
           {isExpanded ? (
@@ -50,7 +43,7 @@ export default function WritePlanToolCall({ args }: { args: string }) {
       {isExpanded && (
         <div className="border-t border-purple-200 dark:border-purple-950">
           <div className="p-3 space-y-2">
-            {parsedArgs?.steps.map((step, index) => (
+            {steps.map((step, index) => (
               <div
                 key={`${step.title}-${index}`}
                 className="bg-white dark:bg-gray-950 border border-purple-200 dark:border-purple-950 rounded-md p-3 hover:shadow-sm transition-shadow"

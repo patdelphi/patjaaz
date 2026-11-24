@@ -96,10 +96,10 @@ export default function Editor({ knowledgeID }: { knowledgeID: string }) {
           mdxEditorRef.current?.setMarkdown(content)
           setIsLoading(false)
         } else {
-          toast.error('Failed to read file ' + curPath)
+          toast.error('Failed to read file ' + knowledgeID)
         }
       })
-  }, [])
+  }, [knowledgeID])
 
   const updateFile = useCallback((content: string) => {
     localStorage.setItem('knowledge_draft', content)

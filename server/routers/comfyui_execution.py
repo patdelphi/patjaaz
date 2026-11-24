@@ -17,6 +17,8 @@ from rich.progress import BarColumn, Column, Progress, Table, TimeElapsedColumn
 from utils.http_client import HttpClient
 
 from services.websocket_service import send_to_websocket
+from services.stream_service import update_stream_status
+from utils.comfyui_history import history_output_urls
 
 
 async def check_comfy_server_running(base_url):
@@ -191,6 +193,13 @@ class WorkflowExecution:
                                 raise Exception(response)
                             response_body = response.json()
                             if self.prompt_id in response_body:
+                                # 反向代理可能漏掉 executed 事件；从完成记录恢复输出文件元数据。
+                                if not self.outputs:
+                                    self.outputs.extend(
+                                        history_output_urls(
+                                            response_body[self.prompt_id], self.base_url
+                                        )
+                                    )
                                 break
                             else:
                                 continue
@@ -249,13 +258,15 @@ class WorkflowExecution:
 
     async def on_status(self, data):
         queue = data['data']['status']['exec_info']['queue_remaining']
+        status = f"In queue, there's {queue} works ahead..."
+        update_stream_status(self.ctx.get("session_id"), status)
         await send_to_websocket(
             self.ctx.get("session_id"),
             {
                 "type": "tool_call_progress",
                 "tool_call_id": self.ctx.get("tool_call_id"),
                 "session_id": self.ctx.get("session_id"),
-                "update": f"In queue, there's {queue} works ahead...",
+                "update": status,
             },
         )
 
@@ -265,6 +276,9 @@ class WorkflowExecution:
             self.progress_task = None
 
         if data["node"] is None:
+            update_stream_status(
+                self.ctx.get("session_id"), "Finalizing generated media..."
+            )
             return False
         else:
             if self.current_node:
@@ -275,6 +289,8 @@ class WorkflowExecution:
             
             self.current_node = node_id
             self.log_node("Executing", node_id)
+            status = f"Executing {self.get_node_title(node_id)}"
+            update_stream_status(self.ctx.get("session_id"), status)
             if self.ctx.get("session_id"):
                 await send_to_websocket(
                     self.ctx.get("session_id"),
@@ -282,7 +298,7 @@ class WorkflowExecution:
                         "type": "tool_call_progress",
                         "tool_call_id": self.ctx.get("tool_call_id"),
                         "session_id": self.ctx.get("session_id"),
-                        "update": f"Executing {self.get_node_title(node_id)}",
+                        "update": status,
                     },
                 )
         return True
@@ -296,6 +312,11 @@ class WorkflowExecution:
 
     async def on_progress(self, data):
         node = data["node"]
+        status = (
+            f"Executing {self.get_node_title(node)} "
+            f"{round(data['value'] / data['max'] * 100)}%"
+        )
+        update_stream_status(self.ctx.get("session_id"), status)
         if self.ctx.get("session_id"):
             await send_to_websocket(
                 self.ctx.get("session_id"),
@@ -303,7 +324,7 @@ class WorkflowExecution:
                     "type": "tool_call_progress",
                     "tool_call_id": self.ctx.get("tool_call_id"),
                     "session_id": self.ctx.get("session_id"),
-                    "update": f"Executing {self.get_node_title(node)} {round(data['value'] / data['max'] * 100)}%",
+                    "update": status,
                 },
             )
         if self.progress_node != node:
@@ -328,6 +349,10 @@ class WorkflowExecution:
 
         if output is None:
             return
+
+        update_stream_status(
+            self.ctx.get("session_id"), "Finishing generated media..."
+        )
 
         for img in output.get("images", []):
             self.outputs.append(self.format_image_path(img))
