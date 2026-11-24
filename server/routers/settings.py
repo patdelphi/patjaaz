@@ -15,27 +15,18 @@ Settings Router - 设置路由模块
 - GET /api/settings/proxy/test - 测试代理连接
 - GET /api/settings/proxy - 获取代理设置
 - POST /api/settings/proxy - 更新代理设置
-- GET /api/settings/knowledge/enabled - 获取启用的知识库列表
 依赖模块：
 - services.settings_service - 设置服务
 - services.db_service - 数据库服务
 - services.config_service - 配置服务
-- services.knowledge_service - 知识库服务
 """
 
 import json
 import os
-import shutil
-import httpx
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Request
 from services.config_service import config_service
-from services.db_service import db_service
+from services.llm_adapters import test_llm_connection
 from services.settings_service import settings_service
-from services.tool_service import tool_service
-from services.knowledge_service import list_user_enabled_knowledge
-from utils.http_client import HttpClient
-from utils.path_security import PathSecurityError, validate_comfyui_proxy_target
-from pydantic import BaseModel
 
 # 创建设置相关的路由器，所有端点都以 /api/settings 为前缀
 router = APIRouter(prefix="/api/settings")
@@ -232,104 +223,6 @@ async def update_proxy_settings(request: Request):
     return result
 
 
-class CreateWorkflowRequest(BaseModel):
-    name: str
-    api_json: dict  # or str if you want it as string
-    description: str
-    inputs: list   # or str if you want it as string
-    outputs: str = None
-
-
-@router.post("/comfyui/create_workflow")
-async def create_workflow(request: CreateWorkflowRequest):
-    if not request.name:
-        raise HTTPException(status_code=400, detail="Name is required")
-    if not request.api_json:
-        raise HTTPException(status_code=400, detail="API JSON is required")
-    if not request.description:
-        raise HTTPException(status_code=400, detail="Description is required")
-    if not request.inputs:
-        raise HTTPException(status_code=400, detail="Inputs are required")
-    try:
-        name = request.name.replace(" ", "_")
-        api_json = json.dumps(request.api_json)
-        inputs = json.dumps(request.inputs)
-        outputs = json.dumps(request.outputs)
-        await db_service.create_comfy_workflow(name, api_json, request.description, inputs, outputs)
-        await tool_service.initialize()
-        return {"success": True}
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Failed to create workflow: {str(e)}")
-
-
-@router.get("/comfyui/list_workflows")
-async def list_workflows():
-    return await db_service.list_comfy_workflows()
-
-
-@router.delete("/comfyui/delete_workflow/{id}")
-async def delete_workflow(id: int):
-    result = await db_service.delete_comfy_workflow(id)
-    await tool_service.initialize()
-    return result
-
-
-@router.post("/comfyui/proxy")
-async def comfyui_proxy(request: Request):
-    """仅向配置中的 ComfyUI 实例转发白名单内的只读查询路径。"""
-    try:
-        data = await request.json()
-        requested_url = data.get("url")
-        path = data.get("path", "")
-        configured_url = config_service.get_config().get("comfyui", {}).get("url", "")
-
-        try:
-            full_url = validate_comfyui_proxy_target(configured_url, requested_url, path)
-        except PathSecurityError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        async with HttpClient.create(timeout=httpx.Timeout(10.0)) as client:
-            response = await client.get(full_url)
-            response.raise_for_status()
-            return response.json()
-    except HTTPException:
-        raise
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=f"ComfyUI server returned status {exc.response.status_code}",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Proxy request failed: {str(e)}")
-
-
-@router.get("/knowledge/enabled")
-async def get_enabled_knowledge():
-    """
-    获取启用的知识库列表
-
-    Returns:
-        dict: 包含启用知识库列表的响应
-    """
-    try:
-        knowledge_list = list_user_enabled_knowledge()
-        return {
-            "success": True,
-            "data": knowledge_list,
-            "count": len(knowledge_list)
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "data": []
-        }
-
-
 @router.get("/my_assets_dir_path")
 async def get_my_assets_dir_path():
     """
@@ -355,3 +248,26 @@ async def get_my_assets_dir_path():
             "error": str(e),
             "path": ""
         }
+
+
+@router.post("/test_llm")
+async def test_llm_endpoint(request: Request):
+    """按提供商协议测试文本模型服务连通性与密钥有效性。"""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Request payload must be an object")
+        provider_name = str(payload.get("provider") or "").strip()
+        if not provider_name:
+            raise HTTPException(status_code=400, detail="provider is required")
+        provider_cfg = {
+            "url": payload.get("url", ""),
+            "api_key": payload.get("api_key", ""),
+            "protocol": payload.get("protocol", ""),
+        }
+        model_name = str(payload.get("model") or "")
+        return await test_llm_connection(provider_name, provider_cfg, model_name=model_name)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

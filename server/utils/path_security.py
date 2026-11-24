@@ -146,20 +146,27 @@ def is_path_in_allowed_roots(target_path: str, allowed_roots: Iterable[str]) -> 
         return False
 
 
-def validate_comfyui_proxy_target(
-    configured_url: str,
+def validate_comfyui_proxy_target_multi(
+    allowed_urls: Iterable[str],
     requested_url: Optional[str],
     requested_path: str,
 ) -> str:
-    """校验 ComfyUI 代理请求的服务器地址与路径，拒绝任意外部 URL（防 SSRF）。"""
-    configured = (configured_url or "").strip().rstrip("/")
-    if not configured:
+    """校验 ComfyUI 代理请求的目标必须命中已配置实例之一，并严格校验只读路径。"""
+    normalized_allowed = [
+        str(u).strip().rstrip("/")
+        for u in allowed_urls
+        if isinstance(u, str) and str(u).strip()
+    ]
+    if not normalized_allowed:
         raise ValueError("ComfyUI URL is not configured")
 
     if requested_url is not None and str(requested_url).strip():
         normalized_req = str(requested_url).strip().rstrip("/")
-        if normalized_req != configured:
-            raise PathSecurityError("Only the configured ComfyUI server is allowed")
+        if normalized_req not in normalized_allowed:
+            raise PathSecurityError("Only configured ComfyUI servers are allowed")
+        base_target = normalized_req
+    else:
+        base_target = normalized_allowed[0]
 
     if not isinstance(requested_path, str) or not requested_path.strip():
         raise PathSecurityError("ComfyUI proxy path is required")
@@ -185,4 +192,22 @@ def validate_comfyui_proxy_target(
     ):
         raise PathSecurityError("ComfyUI proxy path is not in allowlist")
 
-    return f"{configured}{path_text}"
+    return f"{base_target}{path_text}"
+
+
+def validate_comfyui_proxy_target(
+    configured_url: str,
+    requested_url: Optional[str],
+    requested_path: str,
+) -> str:
+    """校验 ComfyUI 代理请求的服务器地址与路径，拒绝任意外部 URL（防 SSRF）。"""
+    configured = (configured_url or "").strip().rstrip("/")
+    if not configured:
+        raise ValueError("ComfyUI URL is not configured")
+
+    if requested_url is not None and str(requested_url).strip():
+        normalized_req = str(requested_url).strip().rstrip("/")
+        if normalized_req != configured:
+            raise PathSecurityError("Only the configured ComfyUI server is allowed")
+
+    return validate_comfyui_proxy_target_multi([configured], requested_url, requested_path)

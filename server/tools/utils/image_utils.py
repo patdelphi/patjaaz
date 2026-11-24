@@ -19,7 +19,8 @@ async def get_image_info_and_save(
     url: str,
     file_path_without_extension: str,
     is_b64: bool = False,
-    metadata: Optional[dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None,
+    headers: Optional[dict[str, str]] = None,
 ) -> Tuple[str, int, int, str]:
     """
     Download image from URL or decode base64, convert to PNG and save with metadata
@@ -29,6 +30,7 @@ async def get_image_info_and_save(
         file_path_without_extension: File path without extension
         is_b64: Whether the url is a base64 string
         metadata: Optional metadata to be saved in PNG info
+        headers: Optional HTTP headers for authenticated ComfyUI instances
 
     Returns:
         tuple[str, int, int, str]: (mime_type, width, height, extension) - always PNG
@@ -37,10 +39,9 @@ async def get_image_info_and_save(
         if is_b64:
             image_data = base64.b64decode(url)
         else:
-            # Fetch the image asynchronously
             async with HttpClient.create_aiohttp() as session:
-                async with session.get(url) as response:
-                    # Read the image content as bytes
+                async with session.get(url, headers=headers or None) as response:
+                    response.raise_for_status()
                     image_data = await response.read()
 
         # Open image to get info

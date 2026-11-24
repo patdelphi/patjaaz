@@ -24,12 +24,14 @@ from .image_utils import generate_image_id, get_image_info_and_save
 AUDIO_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac")
 
 
-async def detect_file_type_comprehensive(url: str) -> str:
+async def detect_file_type_comprehensive(
+    url: str, headers: Optional[dict[str, str]] = None
+) -> str:
     """综合通过 Content-Type 与扩展名判断 ComfyUI 输出媒体类型（image/video/audio）。"""
     lower_url = url.lower()
     try:
         async with HttpClient.create() as client:
-            response = await client.head(url)
+            response = await client.head(url, headers=headers or None)
             content_type = response.headers.get("content-type", "").lower()
 
             if content_type.startswith("image/"):
@@ -54,9 +56,11 @@ async def detect_file_type_comprehensive(url: str) -> str:
 
 
 async def get_audio_info_and_save(
-    url: str, file_path_without_extension: str
+    url: str,
+    file_path_without_extension: str,
+    headers: Optional[dict[str, str]] = None,
 ) -> tuple[str, int, int, str]:
-    """下载并保存 ComfyUI 输出的音频文件。"""
+    """流式下载并原子保存 ComfyUI 输出的音频文件。"""
     ext = "wav"
     lower_url = url.lower()
     for candidate in AUDIO_FORMATS:
@@ -64,13 +68,23 @@ async def get_audio_info_and_save(
             ext = candidate.lstrip(".")
             break
 
-    async with HttpClient.create_aiohttp() as session:
-        async with session.get(url) as response:
-            audio_content = await response.read()
-
     out_path = f"{file_path_without_extension}.{ext}"
-    async with aiofiles.open(out_path, "wb") as out_file:
-        await out_file.write(audio_content)
+    part_path = f"{out_path}.part"
+    try:
+        async with HttpClient.create_aiohttp() as session:
+            async with session.get(url, headers=headers or None) as response:
+                response.raise_for_status()
+                async with aiofiles.open(part_path, "wb") as out_file:
+                    async for chunk in response.content.iter_chunked(1024 * 64):
+                        if chunk:
+                            await out_file.write(chunk)
+        os.replace(part_path, out_path)
+    finally:
+        if os.path.exists(part_path):
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
     mime_type = mimetypes.types_map.get(f".{ext}", f"audio/{ext}")
     return mime_type, 0, 0, ext
 
@@ -157,11 +171,21 @@ class ComfyUIGenerator:
 
 
 class ComfyUIWorkflowRunner:
-    """通用动态 ComfyUI 工作流运行器，支持图片、视频与音频输出落盘。"""
+    """通用动态 ComfyUI 工作流运行器，支持多实例鉴权头与图片、视频、音频输出落盘。"""
 
-    def __init__(self, workflow_dict: dict, base_url: str):
+    def __init__(
+        self,
+        workflow_dict: dict,
+        base_url: str,
+        headers: Optional[dict[str, str]] = None,
+        timeout: float = 300,
+        instance_id: Optional[str] = None,
+    ):
         self.workflow = workflow_dict
         self.base_url = base_url
+        self.headers = dict(headers or {})
+        self.timeout = float(timeout) if timeout and timeout > 0 else 300.0
+        self.instance_id = instance_id
 
     async def generate(
         self,
@@ -171,14 +195,20 @@ class ComfyUIWorkflowRunner:
         ctx = kwargs.get("ctx", {})
 
         execution = await execute(
-            self.workflow, self.base_url, local_paths=True, ctx=ctx
+            self.workflow,
+            self.base_url,
+            local_paths=True,
+            timeout=self.timeout,
+            ctx=ctx,
+            headers=self.headers,
+            instance_id=self.instance_id,
         )
         print("🦄workflow execution outputs", execution.outputs)
 
         results = []
         for url in execution.outputs:
             image_id = generate_image_id()
-            file_type = await detect_file_type_comprehensive(url)
+            file_type = await detect_file_type_comprehensive(url, headers=self.headers)
             if file_type == "video":
                 get_info_func = get_video_info_and_save
             elif file_type == "audio":
@@ -187,7 +217,7 @@ class ComfyUIWorkflowRunner:
                 get_info_func = get_image_info_and_save
 
             mime_type, width, height, extension = await get_info_func(
-                url, os.path.join(FILES_DIR, f"{image_id}")
+                url, os.path.join(FILES_DIR, f"{image_id}"), headers=self.headers
             )
 
             filename = f"{image_id}.{extension}"

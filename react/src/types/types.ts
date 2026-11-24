@@ -1,5 +1,6 @@
 import { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import { AppState, BinaryFiles } from '@excalidraw/excalidraw/types'
+import type { LLMProtocol, ModelCapabilities } from '@/lib/llmProtocol'
 
 export type ToolCallFunctionName =
   | 'generate_image'
@@ -68,10 +69,12 @@ export type LLMConfig = {
       type?: 'text' | 'image' | 'video'
       is_custom?: boolean
       is_disabled?: boolean
+      capabilities?: ModelCapabilities
     }
   >
   url: string
   api_key: string
+  protocol?: LLMProtocol
   max_tokens?: number
   is_custom?: boolean
 }

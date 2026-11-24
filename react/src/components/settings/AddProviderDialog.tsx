@@ -1,5 +1,7 @@
+/** 程序说明：新增开放大模型提供商弹窗，支持按三协议模板（OpenAI/Claude/Gemini/Compatible）快速配置与能力标记。 */
 import CommonDialogContent from '@/components/common/DialogContent'
 import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
 import {
   Dialog,
   DialogFooter,
@@ -8,12 +10,23 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Combobox } from '@/components/ui/combobox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  DEFAULT_PROTOCOL_URLS,
+  LLMProtocol,
+  PROTOCOL_OPTIONS,
+} from '@/lib/llmProtocol'
 import { LLMConfig } from '@/types/types'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import AddModelsList from './AddModelsList'
 import { toast } from 'sonner'
+import AddModelsList, { ModelConfigEntry } from './AddModelsList'
 
 interface AddProviderDialogProps {
   open: boolean
@@ -21,15 +34,40 @@ interface AddProviderDialogProps {
   onSave: (providerKey: string, config: LLMConfig) => void
 }
 
-// Predefined provider options with their API URLs
 const PROVIDER_OPTIONS = [
   {
     value: 'anthropic',
-    label: 'Claude',
+    label: 'Claude (Anthropic)',
     data: {
-      apiUrl: 'https://api.anthropic.com/v1/',
+      protocol: 'anthropic' as LLMProtocol,
+      apiUrl: 'https://api.anthropic.com',
       models: {
-        'claude-3-7-sonnet-latest': { type: 'text' },
+        'claude-sonnet-4-20250514': {
+          type: 'text' as const,
+          capabilities: { vision: true, tools: true, thinking: true },
+        },
+        'claude-3-7-sonnet-latest': {
+          type: 'text' as const,
+          capabilities: { vision: true, tools: true, thinking: true },
+        },
+      },
+    },
+  },
+  {
+    value: 'google',
+    label: 'Google Gemini',
+    data: {
+      protocol: 'google' as LLMProtocol,
+      apiUrl: 'https://generativelanguage.googleapis.com',
+      models: {
+        'gemini-2.5-flash': {
+          type: 'text' as const,
+          capabilities: { vision: true, tools: true, thinking: true },
+        },
+        'gemini-2.5-pro': {
+          type: 'text' as const,
+          capabilities: { vision: true, tools: true, thinking: true },
+        },
       },
     },
   },
@@ -37,42 +75,31 @@ const PROVIDER_OPTIONS = [
     value: 'OpenRouter',
     label: 'OpenRouter',
     data: {
+      protocol: 'openai-compatible' as LLMProtocol,
       apiUrl: 'https://openrouter.ai/api/v1/',
       models: {
-        'openai/gpt-4o': { type: 'text' },
-        'deepseek/deepseek-chat-v3-0324': { type: 'text' },
-        'deepseek/deepseek-chat-v3-0324:free': { type: 'text' },
+        'openai/gpt-4o': {
+          type: 'text' as const,
+          capabilities: { vision: true, tools: true, thinking: false },
+        },
+        'deepseek/deepseek-chat-v3-0324': {
+          type: 'text' as const,
+          capabilities: { vision: false, tools: true, thinking: false },
+        },
       },
     },
   },
   {
-    value: 'wavespeed',
-    label: 'Wavespeed',
-    mediaOnly: true,
-    data: {
-      apiUrl: 'https://api.wavespeed.ai/api/v3/',
-      models: {},
-      api_key: '',
-    },
-  },
-  {
-    value: 'replicate',
-    label: 'Replicate',
-    mediaOnly: true,
-    data: {
-      apiUrl: 'https://api.replicate.com/v1/',
-      models: {},
-      api_key: '',
-      max_tokens: 8192,
-    },
-  },
-  {
-    value: '深度求索',
+    value: 'deepseek',
     label: '深度求索 (DeepSeek)',
     data: {
+      protocol: 'openai-compatible' as LLMProtocol,
       apiUrl: 'https://api.deepseek.com/v1/',
       models: {
-        'deepseek-chat': { type: 'text' },
+        'deepseek-chat': {
+          type: 'text' as const,
+          capabilities: { vision: false, tools: true, thinking: false },
+        },
       },
     },
   },
@@ -80,55 +107,42 @@ const PROVIDER_OPTIONS = [
     value: 'volces',
     label: '火山引擎 (Volces)',
     data: {
+      protocol: 'openai-compatible' as LLMProtocol,
       apiUrl: 'https://ark.cn-beijing.volces.com/api/v3/',
       models: {
-        'doubao-seed-1-6-250615': { type: 'text' },
-        'doubao-seed-1-6-thinking-250615': { type: 'text' },
-        'doubao-seed-1-6-flash-250615': { type: 'text' },
-        'doubao-seedream-3-0-t2i-250415': { type: 'image' },
-        'doubao-seedance-1-0-pro-250528': { type: 'video' },
-        'doubao-seedance-1-0-lite-i2v-250428': { type: 'video' },
-        'doubao-seedance-1-0-lite-t2v-250428': { type: 'video' },
+        'doubao-seed-1-6-250615': {
+          type: 'text' as const,
+          capabilities: { vision: true, tools: true, thinking: true },
+        },
       },
     },
   },
   {
-    value: 'GoogleVertex',
-    label: 'GoogleVertex',
-    data: {
-      apiUrl: '',
-      models: {
-        'gemini-2.5-flash': { type: 'text' },
-        'gemini-2.5-pro': { type: 'text' },
-        'gemini-2.5-flash-lite-preview-06-17': { type: 'text' },
-        'gemini-2.0-flash': { type: 'text' },
-        'gemini-2.0-flash-lite': { type: 'text' },
-        // not supported yet!
-        // 'gemini-2.0-flash-preview-image-generation': { type: 'image' },
-        // 'imagen-4.0-generate-preview-06-06': { type: 'image' },
-        // 'imagen-4.0-fast-generate-preview-06-06': { type: 'image' },
-        // 'imagen-4.0-ultra-generate-preview-06-06': { type: 'image' },
-        // 'imagen-3.0-generate-002': { type: 'image' },
-        // 'imagen-3.0-fast-generate-001': { type: 'image' },
-        // 'veo-3.0-generate-preview': { type: 'video' },
-        // 'veo-2.0-generate-001': { type: 'video' },
-      },
-    },
-  },
-  {
-    value: '硅基流动',
+    value: 'siliconflow',
     label: '硅基流动 (SiliconFlow)',
-    data: { apiUrl: 'https://api.siliconflow.cn/v1/' },
+    data: {
+      protocol: 'openai-compatible' as LLMProtocol,
+      apiUrl: 'https://api.siliconflow.cn/v1/',
+      models: {},
+    },
   },
   {
-    value: '智谱 AI',
+    value: 'zhipu',
     label: '智谱 AI (GLM)',
-    data: { apiUrl: 'https://open.bigmodel.cn/api/paas/v4/' },
+    data: {
+      protocol: 'openai-compatible' as LLMProtocol,
+      apiUrl: 'https://open.bigmodel.cn/api/paas/v4/',
+      models: {},
+    },
   },
   {
-    value: '月之暗面',
+    value: 'moonshot',
     label: '月之暗面 (Kimi)',
-    data: { apiUrl: 'https://api.moonshot.cn/v1/' },
+    data: {
+      protocol: 'openai-compatible' as LLMProtocol,
+      apiUrl: 'https://api.moonshot.cn/v1/',
+      models: {},
+    },
   },
 ]
 
@@ -139,62 +153,62 @@ export default function AddProviderDialog({
 }: AddProviderDialogProps) {
   const { t } = useTranslation()
   const [providerName, setProviderName] = useState('')
+  const [protocol, setProtocol] = useState<LLMProtocol>('openai-compatible')
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const [models, setModels] = useState<
-    Record<string, { type?: 'text' | 'image' | 'video' }>
-  >({})
+  const [models, setModels] = useState<Record<string, ModelConfigEntry>>({})
 
-  const isMediaOnlyProvider =
-    PROVIDER_OPTIONS.find((p) => p.value === providerName)?.mediaOnly ?? false
-
-  // Handle data change when provider is selected
   const handleProviderDataChange = (data: any) => {
     if (data && typeof data === 'object' && 'apiUrl' in data) {
       setApiUrl((data as { apiUrl: string }).apiUrl)
+      if (data.protocol) {
+        setProtocol(data.protocol as LLMProtocol)
+      }
       setModels(data.models ?? {})
     }
+  }
+
+  const handleProtocolChange = (nextProtocol: LLMProtocol) => {
+    setProtocol(nextProtocol)
+    if (!apiUrl.trim()) {
+      setApiUrl(DEFAULT_PROTOCOL_URLS[nextProtocol] || '')
+    }
+  }
+
+  const resetForm = () => {
+    setProviderName('')
+    setProtocol('openai-compatible')
+    setApiUrl('')
+    setApiKey('')
+    setModels({})
   }
 
   const handleSave = () => {
     if (!providerName.trim() || !apiUrl.trim()) {
       return
     }
-    if (
-      !PROVIDER_OPTIONS.find((p) => p.value === providerName)?.mediaOnly &&
-      Object.keys(models).length === 0
-    ) {
+    if (Object.keys(models).length === 0) {
       toast.error(t('settings:provider.noModelsSelected'))
       return
     }
 
     const config: LLMConfig = {
       models,
-      url: apiUrl,
+      url: apiUrl.trim(),
       api_key: apiKey,
+      protocol,
       max_tokens: 8192,
       is_custom: true,
     }
 
-    // Use provider name as key (convert to lowercase and replace spaces with underscores)
     const providerKey = providerName.toLowerCase().replace(/\s+/g, '_')
-
     onSave(providerKey, config)
-
-    // Reset form
-    setProviderName('')
-    setApiUrl('')
-    setApiKey('')
-    setModels({})
+    resetForm()
     onOpenChange(false)
   }
 
   const handleCancel = () => {
-    // Reset form
-    setProviderName('')
-    setApiUrl('')
-    setApiKey('')
-    setModels({})
+    resetForm()
     onOpenChange(false)
   }
 
@@ -202,14 +216,10 @@ export default function AddProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <CommonDialogContent open={open}>
         <DialogHeader>
-          <DialogTitle>
-            {t('settings:provider.addProvider')}
-            {isMediaOnlyProvider && <span className="ml-3">🎨 🎥</span>}
-          </DialogTitle>
+          <DialogTitle>{t('settings:provider.addProvider')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Provider Name */}
           <div className="space-y-2">
             <Label htmlFor="provider-name">
               {t('settings:provider.providerName')}
@@ -224,7 +234,25 @@ export default function AddProviderDialog({
             />
           </div>
 
-          {/* API URL */}
+          <div className="space-y-2">
+            <Label htmlFor="provider-protocol">接入协议</Label>
+            <Select
+              value={protocol}
+              onValueChange={(val) => handleProtocolChange(val as LLMProtocol)}
+            >
+              <SelectTrigger id="provider-protocol">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROTOCOL_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="api-url">{t('settings:provider.apiUrl')}</Label>
             <Input
@@ -235,7 +263,6 @@ export default function AddProviderDialog({
             />
           </div>
 
-          {/* API Key */}
           <div className="space-y-2">
             <Label htmlFor="api-key">{t('settings:provider.apiKey')}</Label>
             <Input
@@ -247,14 +274,11 @@ export default function AddProviderDialog({
             />
           </div>
 
-          {/* Models */}
-          {!isMediaOnlyProvider && (
-            <AddModelsList
-              models={models}
-              onChange={setModels}
-              label={t('settings:models.title')}
-            />
-          )}
+          <AddModelsList
+            models={models}
+            onChange={setModels}
+            label={t('settings:models.title')}
+          />
         </div>
 
         <DialogFooter>

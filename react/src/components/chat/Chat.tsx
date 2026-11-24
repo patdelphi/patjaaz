@@ -3,7 +3,6 @@ import Blur from '@/components/common/Blur'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { eventBus, TEvents } from '@/lib/event'
 import { TaskStatusSnapshot } from '@/lib/chatTaskProgress'
-import ChatMagicGenerator from './ChatMagicGenerator'
 import {
   AssistantMessage,
   Message,
@@ -834,16 +833,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             messages={messages}
             onSendMessages={onSendMessages}
             onCancelChat={handleCancelChat}
-          />
-
-          {/* 魔法生成组件 */}
-          <ChatMagicGenerator
-            sessionId={sessionId || ''}
-            canvasId={canvasId}
-            messages={messages}
-            setMessages={setMessages}
-            setPending={setPending}
-            scrollToBottom={scrollToBottom}
           />
         </div>
       </div>

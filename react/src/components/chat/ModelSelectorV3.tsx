@@ -36,7 +36,7 @@ const ModelSelectorV3: React.FC<ModelSelectorV3Props> = ({
     allTools,
   } = useConfigs()
 
-  const [activeTab, setActiveTab] = useState<'image' | 'video' | 'text'>('image')
+  const [activeTab, setActiveTab] = useState<'image' | 'video' | 'audio' | 'text'>('image')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const { t } = useTranslation()
 
@@ -79,7 +79,7 @@ const ModelSelectorV3: React.FC<ModelSelectorV3Props> = ({
   const groupedTools = groupModelsByProvider(allTools)
 
   // Filter tools by type
-  const getToolsByType = (type: 'image' | 'video') => {
+  const getToolsByType = (type: 'image' | 'video' | 'audio') => {
     const filteredTools = allTools.filter(tool => tool.type === type)
     return groupModelsByProvider(filteredTools)
   }
@@ -227,9 +227,11 @@ const ModelSelectorV3: React.FC<ModelSelectorV3Props> = ({
     }
   }
 
+  const hasAudioTools = allTools.some((t) => t.type === 'audio')
   const tabs = [
     { id: 'image', label: t('chat:modelSelector.tabs.image') },
     { id: 'video', label: t('chat:modelSelector.tabs.video') },
+    ...(hasAudioTools ? [{ id: 'audio', label: '音频' } as const] : []),
     { id: 'text', label: t('chat:modelSelector.tabs.text') }
   ] as const
 

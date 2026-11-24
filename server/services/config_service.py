@@ -46,37 +46,64 @@ def merge_masked_secrets(incoming: "AppConfig", existing: "AppConfig") -> "AppCo
     return merged
 
 
+ProtocolType = Literal["openai", "anthropic", "google", "openai-compatible"]
+
+
+class ModelCapabilities(TypedDict, total=False):
+    vision: bool
+    tools: bool
+    thinking: bool
+    context_length: int
+
+
 class ModelConfig(TypedDict, total=False):
     type: Literal["text", "image", "video"]
     is_custom: Optional[bool]
     is_disabled: Optional[bool]
+    capabilities: Optional[ModelCapabilities]
 
 
 class ProviderConfig(TypedDict, total=False):
     url: str
     api_key: str
     max_tokens: int
+    protocol: ProtocolType
     models: Dict[str, ModelConfig]
     is_custom: Optional[bool]
 
 
 AppConfig = Dict[str, ProviderConfig]
 
+ALLOWED_PROTOCOLS = ("openai", "anthropic", "google", "openai-compatible")
+
+
+def infer_provider_protocol(
+    provider_name: str, provider_config: Optional[Dict[str, object]] = None
+) -> ProtocolType:
+    """根据显式配置、提供商名称或 API URL 推断模型调用协议。"""
+    if isinstance(provider_config, dict):
+        explicit = str(provider_config.get("protocol") or "").strip().lower()
+        if explicit in ALLOWED_PROTOCOLS:
+            return explicit  # type: ignore[return-value]
+        url_text = str(provider_config.get("url") or "").strip().lower()
+    else:
+        url_text = ""
+
+    key = str(provider_name or "").strip().lower()
+    if "anthropic" in key or "claude" in key or "api.anthropic.com" in url_text:
+        return "anthropic"
+    if (
+        key in ("google", "gemini", "google_gemini")
+        or "gemini" in key
+        or "generativelanguage.googleapis.com" in url_text
+    ):
+        return "google"
+    if key == "openai" or "api.openai.com" in url_text:
+        return "openai"
+    return "openai-compatible"
+
 
 DEFAULT_PROVIDERS_CONFIG: AppConfig = {
-    'jaaz': {
-        'models': {
-            # text models
-            'gpt-4o': {'type': 'text'},
-            'gpt-4o-mini': {'type': 'text'},
-            'deepseek/deepseek-chat-v3-0324': {'type': 'text'},
-            'anthropic/claude-sonnet-4': {'type': 'text'},
-            'anthropic/claude-3.7-sonnet': {'type': 'text'},
-        },
-        'url': os.getenv('BASE_API_URL', 'https://jaaz.app').rstrip('/') + '/api/v1/',
-        'api_key': '',
-        'max_tokens': 8192,
-    },
     'comfyui': {
         'models': {},
         'url': 'http://127.0.0.1:8188',
@@ -86,18 +113,57 @@ DEFAULT_PROVIDERS_CONFIG: AppConfig = {
         'models': {},
         'url': 'http://localhost:11434',
         'api_key': '',
+        'protocol': 'openai-compatible',
         'max_tokens': 8192,
     },
     'openai': {
         'models': {
-            'gpt-4o': {'type': 'text'},
-            'gpt-4o-mini': {'type': 'text'},
+            'gpt-4o': {
+                'type': 'text',
+                'capabilities': {'vision': True, 'tools': True, 'thinking': False},
+            },
+            'gpt-4o-mini': {
+                'type': 'text',
+                'capabilities': {'vision': True, 'tools': True, 'thinking': False},
+            },
         },
         'url': 'https://api.openai.com/v1/',
         'api_key': '',
+        'protocol': 'openai',
         'max_tokens': 8192,
     },
-
+    'anthropic': {
+        'models': {
+            'claude-sonnet-4-20250514': {
+                'type': 'text',
+                'capabilities': {'vision': True, 'tools': True, 'thinking': True},
+            },
+            'claude-3-7-sonnet-latest': {
+                'type': 'text',
+                'capabilities': {'vision': True, 'tools': True, 'thinking': True},
+            },
+        },
+        'url': 'https://api.anthropic.com',
+        'api_key': '',
+        'protocol': 'anthropic',
+        'max_tokens': 8192,
+    },
+    'google': {
+        'models': {
+            'gemini-2.5-flash': {
+                'type': 'text',
+                'capabilities': {'vision': True, 'tools': True, 'thinking': True},
+            },
+            'gemini-2.5-pro': {
+                'type': 'text',
+                'capabilities': {'vision': True, 'tools': True, 'thinking': True},
+            },
+        },
+        'url': 'https://generativelanguage.googleapis.com',
+        'api_key': '',
+        'protocol': 'google',
+        'max_tokens': 8192,
+    },
 }
 
 SERVER_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -136,10 +202,6 @@ class ConfigService:
         )
         self.initialized = False
 
-    def _get_jaaz_url(self) -> str:
-        """Get the correct jaaz URL"""
-        return os.getenv('BASE_API_URL', 'https://jaaz.app').rstrip('/') + '/api/v1/'
-
     async def initialize(self) -> None:
         try:
             # Ensure the user_data directory exists
@@ -160,23 +222,31 @@ class ConfigService:
                 content = await f.read()
                 config: AppConfig = toml.loads(content)
             for provider, provider_config in config.items():
+                # 跳过旧版本地遗留的 Jaaz 云端配置段，避免重新注册云端模型。
+                if provider == 'jaaz':
+                    continue
                 if provider not in DEFAULT_PROVIDERS_CONFIG:
                     provider_config['is_custom'] = True
                 self.app_config[provider] = provider_config
-                # image/video models are hardcoded in the default provider config
+                if provider != 'comfyui' and not provider_config.get('protocol'):
+                    self.app_config[provider]['protocol'] = infer_provider_protocol(
+                        provider, provider_config
+                    )
+
+                # 合并默认模型与用户自定义模型配置，并保留用户对模型能力标签的修改
                 provider_models = copy.deepcopy(
                     DEFAULT_PROVIDERS_CONFIG.get(provider, {}).get('models', {})
                 )
                 for model_name, model_config in provider_config.get('models', {}).items():
-                    # Only text model can be self added
-                    if model_config.get('type') == 'text' and model_name not in provider_models:
-                        provider_models[model_name] = model_config
+                    if model_name in provider_models:
+                        merged_model = copy.deepcopy(provider_models[model_name])
+                        if isinstance(model_config, dict):
+                            merged_model.update(model_config)
+                        provider_models[model_name] = merged_model
+                    elif model_config.get('type') == 'text':
+                        provider_models[model_name] = dict(model_config)
                         provider_models[model_name]['is_custom'] = True
                 self.app_config[provider]['models'] = provider_models
-
-            # 确保 jaaz URL 始终正确
-            if 'jaaz' in self.app_config:
-                self.app_config['jaaz']['url'] = self._get_jaaz_url()
         except Exception as e:
             print(f"Error loading config: {e}")
             traceback.print_exc()
@@ -184,8 +254,6 @@ class ConfigService:
             self.initialized = True
 
     def get_config(self) -> AppConfig:
-        if 'jaaz' in self.app_config:
-            self.app_config['jaaz']['url'] = self._get_jaaz_url()
         return self.app_config
 
     def get_masked_config(self) -> AppConfig:
@@ -200,9 +268,10 @@ class ConfigService:
 
     async def update_config(self, data: AppConfig) -> Dict[str, str]:
         try:
-            sanitized = merge_masked_secrets(data, self.app_config)
-            if 'jaaz' in sanitized and isinstance(sanitized['jaaz'], dict):
-                sanitized['jaaz']['url'] = self._get_jaaz_url()
+            filtered = {
+                k: v for k, v in data.items() if k != 'jaaz'
+            } if isinstance(data, dict) else data
+            sanitized = merge_masked_secrets(filtered, self.app_config)
 
             os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
             with open(self.config_file, "w", encoding="utf-8") as f:

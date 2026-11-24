@@ -11,7 +11,8 @@ export type ToolInfo = {
   provider: string
   id: string
   display_name?: string | null
-  type?: 'image' | 'tool' | 'video'
+  type?: 'image' | 'tool' | 'video' | 'audio'
+  capability?: string
 }
 
 export async function listModels(): Promise<{

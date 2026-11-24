@@ -277,3 +277,64 @@
 - 未执行项：
   - 浏览器与真实 ComfyUI 运行态手工验证：并发编辑不丢失元素、线宽 16 箭头视觉与 PNG/SVG 导出不裁剪、块箭头交互拉伸、错误访问码 5 次锁定、重启后免重登待人工交互验证。
   - 本轮 M0 + M1 代码改动保留在工作区，尚未执行 `git add` / `git commit` / `git push`。
+
+---
+
+## M1 主体：去云端 + ComfyUI 外部文件组工作流与多实例能力层 + 三协议模型（2026-11-24 已完成待确认提交）
+
+依据：`Docs/04-Jaaz AIGC无限画布深度分析与规划.md` 第 2.3、7.1、7.2、7.10、9 节及 `Docs/06-Jaaz AIGC无限画布详细技术设计.md` 第 1.2、3 节（含新增 3.6 外部文件组工作流包规范）。本轮完成后，不配置任何云端 Key，仅用本地/线上 ComfyUI + 任一开放 LLM 即可完成生图、编辑、视频/TTS 与工具开关管理；M2 `pi` Agent 迁移在下一轮开展。
+
+### 范围
+
+- 去 Jaaz 云端清理：移除 13 个 `*_jaaz` 工具、`jaaz_provider`/`jaaz_service`/`magic_service`/`knowledge_service`/`mcp`/`OpenAIAgents_service`，移除前端 Magic/Knowledge/AgentStudio 入口、PostHog 上报、`ModelSelectorV2` 冗余实现与 `jaaz.app` 云端常量；下线 Volces/Replicate/Wavespeed 等直连第三方媒体默认注册，清理 `react/package.json` 中的 `tldraw` 与 `posthog-js`。
+- SQLite v4 迁移（迁移前自动备份 `localmanus.db`）：创建 `comfy_instances` 与 `jobs` 表，扩展 `comfy_workflows`（`display_name`、`capability`、`output_kind`、`enabled`、`instance_id`、`source_mode`、`source_path`、`seed_strategy`、`schema_version`、`checksum`），兼容保留历史 DB 工作流（`text2image_MOSS`、`ImageEdit_MOSS`）并默认启用。
+- ComfyUI 多实例与通信加固（K1–K2、K4–K5）：`urlsplit` 保留子路径前缀解析 HTTP/WS，支持 Bearer/Basic/自定义 Header 鉴权（掩码存储返回），恢复 `HttpClient` 连接池，定期/手动健康检查，上传 `sha256` 去重缓存，流式视频/音频写入，任务取消联动调用 ComfyUI `/queue` 删除与 `/interrupt`。
+- 项目内指定目录成对文件 ComfyUI 工作流与管理端开关（K3 升级）：
+  - 固定项目内目录 `<repo_root>/workflows/`，支持成对文件：`<repo_root>/workflows/<dir>/{workflow.api.json, jaaz.workflow.json}` 与平铺成对 `<repo_root>/workflows/{name.api.json, name.jaaz.json}`；
+  - 导入与扫描时严格校验：拦截 ComfyUI UI 画布 JSON，逐项验证 `inputs[].node_id` 与 `node_input_name` 在 API JSON 中的存在性；
+  - 管理端支持：导入成对文件组（落盘到 `workflows/`）、一键扫描项目内 `workflows/` 目录同步、上传单个 API JSON 自动生成 `jaaz.workflow.json` 模板草稿、一键导出已有工作流为双文件组、查看参数列表与节点校验状态、原地事务编辑（`PUT`）与一键开关（Switch）；关闭后立即从 `tool_service` 和 `/api/list_tools` 移除，不让 Agent 选用；
+  - 废除旧版 `ComfyuiWorkflowSetting.tsx`“编辑先删再建”危险流程与复杂手工逐节点拼表弹窗。
+- 统一 `CapabilityProvider` 接口与注册表（`server/services/capabilities/`）：定义 `Capability`、`AssetRef`、`ProgressUpdate`、`CancelToken`、`CapabilityProvider`、`CapabilityRegistry`，ComfyUI 作为默认实现，预留 TTS / ASR / 音乐等外部 HTTP API Provider 基类。
+- 开放文本模型三协议支持（L1–L2，方案 A 零新增依赖）：支持 `openai`、`anthropic`、`google`、`openai-compatible` 四类协议配置、模型能力标记（`vision`、`tools`、`thinking`、`context_length`）与 `/api/settings/test_llm` 连通性测试（密钥脱敏）。
+
+### 阶段
+
+1. [x] 去 Jaaz 云端清理与冗余移除
+   - [x] 移除 `server/tools/*_jaaz.py`、`jaaz_provider.py`、`jaaz_service.py`、`magic_service.py`、`knowledge_service.py`、`mcp.py`、`OpenAIAgents_service/` 及相关依赖路由（`chat_router` 的 `/magic*`、`settings.py` 的 `/knowledge/enabled`）；将 4 个 `*_replicate.py` 的 Pydantic Schema 内联移除断链依赖。
+   - [x] 清理 `config_service.py` 中的 `jaaz` 默认提供商、`BASE_API_URL`、`_get_jaaz_url`（并在加载旧 `config.toml` 时自动跳过 `[jaaz]` 段）；清理 `tool_service.py` 中云端工具默认注册。
+   - [x] 清理 `image_vide_creator_config.py` 与 `StreamProcessor.py` 中写死的 `*_jaaz` 工具引用。
+   - [x] 清理前端 `Magic`（`api/magic.ts`、`ChatMagicGenerator`、`CanvasMagicGenerator`、`event.ts`）、`Knowledge`（`api/knowledge.ts`、`knowledge.tsx`）、`AgentStudio`（`routes/agent_studio.tsx`）、`api/auth.ts`、`constants.ts` 中的 `jaaz.app`/`BASE_API_URL`/`LOGO_URL`、`PostHogProvider`、`ModelSelectorV2`，清理 `react/package.json` 的 `tldraw` / `posthog-js` 并重新生成 `route-tree.gen.ts`。
+2. [x] SQLite v4 迁移（自动备份）与 ComfyUI 多实例能力加固
+   - [x] 实现迁移前自动备份 `localmanus.db`（含 `-wal`/`-shm`）到 `USER_DATA_DIR/backups/`，失败时自动回滚恢复（实测备份至 `server/user_data/backups/localmanus.db.bak-v3-20261124161442`）。
+   - [x] 新增 `v4` 迁移：`comfy_instances` 表、`jobs` 表、幂等扩展 `comfy_workflows` 元数据与 `enabled`/`source_mode`/`source_path`/`checksum` 等列，保留既有 `text2image_MOSS` / `ImageEdit_MOSS` 并自动回填默认能力与启用状态。
+   - [x] 提取 `comfy_instance_service.py`（保留子路径前缀的 HTTP/WS 解析、Bearer/Basic/自定义 Header、密钥掩码、`sha256` 上传去重缓存、恢复 `HttpClient` 连接池）。
+   - [x] 实现多实例管理 CRUD、健康探测（`/system_stats`）与 `/api/cancel/{session_id}` 联动调用 ComfyUI `/queue` 删除与 `/interrupt`。
+3. [x] 项目内 `workflows/` 成对文件 ComfyUI 工作流与管理端启停开关
+   - [x] 新建 `<repo_root>/workflows/README.md`、`workflows/jaaz.workflow.schema.json`、`.agents/skills/import-comfyui-workflow/SKILL.md` 与 `server/scripts/workflow_cli.py`，形成完整外部 AI Agent 直接导入契约（`inspect` -> `validate` -> `install` / `enable` / `disable` / `export-all`）。
+   - [x] 新建 `server/services/comfy_workflow_pack.py` 与 `server/services/comfy_workflow_ai_importer.py`：支持节点连线过滤与 `/object_info` 枚举融合摘要、由系统已配置 LLM 直接解析 API JSON 生成配置并在校验失败时自动二次纠错、`workflows/` 目录启动及页面刷新增量热同步。
+   - [x] 新建 `server/routers/comfyui_router.py` 并更新 `main.py`、`db_service.py`、`tool_service.py`、`comfy_dynamic.py`、`root_router.py`、`image_router.py`：提供 `/workflows/inspect` 与 `/workflows/ai_import` 一键入库接口；`register_comfy_tools()` 只注册 `enabled = 1` 且按 `output_kind` 注册真实类型；关闭开关立即刷新 `tool_service` 使其对 Agent 不可见。
+   - [x] 重构 `ComfyuiSetting.tsx` 与 `ComfyuiWorkflowSetting.tsx`（内置默认“AI 自动解析导入”Tab、成对文件导入、目录同步、单行参数/开关管理），新增 `react/src/lib/comfyWorkflowPack.ts`，更新 `ModelSelectorV3.tsx` 支持 `audio` 标签页。
+4. [x] 统一 `CapabilityProvider` 抽象层与扩展注册表
+   - [x] 新增 `server/services/capabilities/`：`base.py`（`Capability`、`AssetRef`、`ProgressUpdate`、`CancelToken`、`CapabilityProvider`、`HttpApiCapabilityProvider`）、`registry.py`（按 `capability` 与优先级路由及故障回退）、`comfyui_provider.py`（接入已启用的 ComfyUI 工作流调度）。
+   - [x] 编写能力注册表、ComfyUI 禁用隔离、故障回退与外部 `TTS` 桩实现单元测试。
+5. [x] 开放文本模型三协议支持（L1–L2，方案 A 零新增依赖）
+   - [x] 扩展 `config_service.py` 与 `config_model.py`：支持 `protocol`（`openai`/`anthropic`/`google`/`openai-compatible`）、协议自动推断及模型能力标记（`vision`/`tools`/`thinking`/`context_length`）。
+   - [x] 新建 `server/services/llm_adapters.py`：基于已装 `anthropic` 与 `httpx` 实现 `AnthropicNativeChatModel` 与 `GeminiNativeChatModel`（均完整支持 `bind_tools` 与 `create_react_agent`）、`create_chat_model` 路由及 `/api/settings/test_llm` 连通性测试（错误密钥脱敏）。
+   - [x] 更新前端 `llmProtocol.ts`、`types.ts`、`AddProviderDialog.tsx`、`CommonSetting.tsx`、`AddModelsList.tsx` 支持协议切换、能力标签开关与一键测试连接。
+6. [x] 全量验证与文档收尾
+   - [x] 新增 `test_m1_cloud_cleanup.py`、`test_m1_comfy_packs.py`、`test_m1_capabilities_and_llm.py`、`test_m1_ai_workflow_import.py` 与 `react/test/comfy-workflow-pack.test.js`、`llm-protocol-config.test.js`。
+   - [x] 后端 `py_compile`、`server/.venv/Scripts/python.exe -X dev -m unittest discover -s tests -v`、前端 `npm.cmd run test:run`、前端 `npm.cmd run build`、`git diff --check` 与文档 UTF-8 BOM + CRLF 检查通过。
+   - [x] 更新 `Docs/06` 与 `todo.md` 执行状态，保持 UTF-8 BOM + CRLF；未执行 git commit/push，等待用户审阅确认。
+
+### 完成标准
+
+- 未配置任何云端 Key，且仓库不含 `jaaz.app` 云端工具、`magic_service`、`knowledge_service` 与 `mcp`。
+- 本地或外部目录的一组文件（`workflow.api.json` + `jaaz.workflow.json`）导入即用，缺失节点或错传 UI JSON 时给出明确中文报错，不会静默失败。
+- 管理端对工作流切换启用/关闭开关后，`/api/list_tools` 与 Agent 工具集实时同步；关闭后的工作流不会被 Agent 选中。
+- `CapabilityProvider` 注册表与多实例 `/interrupt` 取消链路均有自动化单元测试覆盖；OpenAI、Claude、Gemini、OpenAI-compatible 四类模型可配置、保存并经过测试验证。
+
+### 已确认事项（2026-11-24）
+
+1. **工作流文件组目录**：固定在项目内目录 `<repo_root>/workflows/`，兼容 `<dir>/{workflow.api.json, jaaz.workflow.json}` 与 `<name>.api.json + <name>.jaaz.json`；禁用工作流从 `tool_service`（Agent）和 `/api/list_tools` 同时隐藏。
+2. **清理与迁移**：已批准删除废弃云端/Magic/Knowledge/MCP 文件、执行 SQLite v4 迁移（自动备份 `localmanus.db`）、从 `react/package.json` 移除未使用的 `tldraw` 和 `posthog-js`。
+3. **阶段 5 接入方案**：选定方案 A（零新增 Python 依赖，使用已安装的 `anthropic` 与 `httpx` 实现原生 Claude / Gemini REST `BaseChatModel` 适配）。

@@ -174,21 +174,27 @@ async def get_file(file_id: str):
 
 @router.post("/comfyui/object_info")
 async def get_object_info(data: dict):
-    """仅向已配置的 ComfyUI 实例请求 /api/object_info。"""
-    configured_url = config_service.get_config().get("comfyui", {}).get("url", "")
+    """向已配置的 ComfyUI 实例请求 /api/object_info 并自动透传鉴权头。"""
+    from services.comfy_instance_service import comfy_instance_service
+    from utils.path_security import validate_comfyui_proxy_target_multi
+
+    allowed_urls = await comfy_instance_service.get_allowed_proxy_urls()
+    requested_url = data.get("url")
     try:
-        target_url = validate_comfyui_proxy_target(
-            configured_url, data.get("url"), "/api/object_info"
+        target_url = validate_comfyui_proxy_target_multi(
+            allowed_urls, requested_url, "/api/object_info"
         )
     except PathSecurityError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    base_target = requested_url or (allowed_urls[0] if allowed_urls else "")
+    headers = await comfy_instance_service.find_headers_for_url(base_target)
     try:
         timeout = httpx.Timeout(10.0)
         async with HttpClient.create(timeout=timeout) as client:
-            response = await client.get(target_url)
+            response = await client.get(target_url, headers=headers or None)
             if response.status_code == 200:
                 return response.json()
             raise HTTPException(

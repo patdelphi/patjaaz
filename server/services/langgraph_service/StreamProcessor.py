@@ -110,16 +110,8 @@ class StreamProcessor:
         self.tool_calls = [tc for tc in tool_calls if tc.get('name')]
         print('😘tool_call event', tool_calls)
 
-        # 需要确认的工具列表
-        TOOLS_REQUIRING_CONFIRMATION = {
-            # 'generate_video_by_kling_v2_jaaz',
-            # 'generate_video_by_seedance_v1_pro_volces',
-            # 'generate_video_by_seedance_v1_lite_i2v',
-            # 'generate_video_by_seedance_v1_lite_t2v',
-            # 'generate_video_by_seedance_v1_jaaz',
-            # 'generate_video_by_hailuo_02_jaaz',
-            'generate_video_by_veo3_fast_jaaz',
-        }
+        # 需要确认的工具列表（保留配置位供本地高成本工作流按需挂载）
+        TOOLS_REQUIRING_CONFIRMATION: set[str] = set()
 
         for tool_call in self.tool_calls:
             tool_name = tool_call.get('name')

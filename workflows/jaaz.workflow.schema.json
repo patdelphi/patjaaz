@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jaaz.workflow.schema.json",
+  "title": "Jaaz ComfyUI Workflow Config v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "display_name",
+    "capability",
+    "output_kind",
+    "enabled",
+    "description",
+    "inputs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_]+$",
+      "description": "唯一工具标识，只能包含字母、数字与下划线"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "管理端展示名称"
+    },
+    "capability": {
+      "type": "string",
+      "enum": [
+        "t2i",
+        "i2i",
+        "inpaint",
+        "outpaint",
+        "rembg",
+        "upscale",
+        "t2v",
+        "i2v",
+        "tts",
+        "asr",
+        "music",
+        "custom"
+      ]
+    },
+    "output_kind": {
+      "type": "string",
+      "enum": ["image", "video", "audio"]
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "为 true 时才暴露给 Agent 选用"
+    },
+    "instance_id": {
+      "type": "string",
+      "default": "",
+      "description": "绑定的 ComfyUI 实例 ID，留空按优先级自动选择"
+    },
+    "seed_strategy": {
+      "type": "string",
+      "enum": ["random", "fixed", "param"],
+      "default": "random"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "面向 Agent 的完整工作流用途与参数使用说明"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "required",
+          "node_id",
+          "node_input_name",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "bool",
+              "image",
+              "audio",
+              "video",
+              "enum"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "node_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "node_input_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default_value": {},
+          "options": {
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "outputs": {}
+  }
+}

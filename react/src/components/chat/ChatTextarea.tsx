@@ -1,6 +1,5 @@
 /** 程序说明：提供聊天输入、图片附件上传和消息发送交互。 */
 import { cancelChat } from '@/api/chat'
-import { cancelMagicGenerate } from '@/api/magic'
 import { uploadImage } from '@/api/upload'
 import { Button } from '@/components/ui/button'
 import { useConfigs } from '@/contexts/configs'
@@ -31,7 +30,6 @@ import Textarea, { TextAreaRef } from 'rc-textarea'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import ModelSelectorV2 from './ModelSelectorV2'
 import ModelSelectorV3 from './ModelSelectorV3'
 import {
   DropdownMenu,
@@ -135,8 +133,7 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
 
   const handleCancelChat = useCallback(async () => {
     if (sessionId) {
-      // 同时取消普通聊天和魔法生成任务
-      await Promise.all([cancelChat(sessionId), cancelMagicGenerate(sessionId)])
+      await cancelChat(sessionId)
     }
     onCancelChat?.()
   }, [sessionId, onCancelChat])

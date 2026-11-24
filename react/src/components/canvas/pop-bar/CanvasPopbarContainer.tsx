@@ -1,10 +1,9 @@
-/** 程序说明：选中元素悬浮操作栏容器，按当前选中类型组合显示文字底色、线宽、块箭头与 AI 操作。 */
+/** 程序说明：选中元素悬浮操作栏容器，按当前选中类型组合显示文字底色、线宽与块箭头操作。 */
 import { TCanvasAddImagesToChatEvent } from '@/lib/event'
 import { motion } from 'motion/react'
 import { memo } from 'react'
 import type { ExcalidrawElement, OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import CanvasBlockArrowControls from './CanvasBlockArrowControls'
-import CanvasMagicGenerator from './CanvasMagicGenerator'
 import CanvasPopbar from './CanvasPopbar'
 import CanvasStrokeWidth from './CanvasStrokeWidth'
 import CanvasTextBackground from './CanvasTextBackground'
@@ -12,12 +11,10 @@ import CanvasTextBackground from './CanvasTextBackground'
 type CanvasPopbarContainerProps = {
   pos: { x: number; y: number }
   selectedImages: TCanvasAddImagesToChatEvent
-  selectedElements: OrderedExcalidrawElement[]
   selectedTextElements: OrderedExcalidrawElement[]
   selectedStrokeElements: ExcalidrawElement[]
   selectedBlockArrows: ExcalidrawElement[]
   showAddToChat: boolean
-  showMagicGenerate: boolean
   showTextBackground: boolean
   showStrokeWidth: boolean
   showBlockArrow: boolean
@@ -26,12 +23,10 @@ type CanvasPopbarContainerProps = {
 const CanvasPopbarContainer = ({
   pos,
   selectedImages,
-  selectedElements,
   selectedTextElements,
   selectedStrokeElements,
   selectedBlockArrows,
   showAddToChat,
-  showMagicGenerate,
   showTextBackground,
   showStrokeWidth,
   showBlockArrow,
@@ -59,12 +54,6 @@ const CanvasPopbarContainer = ({
           <CanvasBlockArrowControls selectedBlockArrows={selectedBlockArrows} />
         )}
         {showAddToChat && <CanvasPopbar selectedImages={selectedImages} />}
-        {showMagicGenerate && (
-          <CanvasMagicGenerator
-            selectedImages={selectedImages}
-            selectedElements={selectedElements}
-          />
-        )}
       </div>
     </motion.div>
   )

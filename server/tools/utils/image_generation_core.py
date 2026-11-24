@@ -8,8 +8,7 @@ from common import DEFAULT_PORT
 from tools.utils.image_utils import process_input_image
 from ..image_providers.image_base_provider import ImageProviderBase
 
-# 导入所有提供商以确保自动注册 (不要删除这些导入)
-from ..image_providers.jaaz_provider import JaazImageProvider
+# 导入本地及可扩展提供商（已移除 Jaaz 云端代理提供商）
 from ..image_providers.openai_provider import OpenAIImageProvider
 from ..image_providers.replicate_provider import ReplicateImageProvider
 from ..image_providers.volces_provider import VolcesProvider
@@ -22,7 +21,6 @@ from .image_canvas_utils import (
 import time
 
 IMAGE_PROVIDERS: dict[str, ImageProviderBase] = {
-    "jaaz": JaazImageProvider(),
     "openai": OpenAIImageProvider(),
     "replicate": ReplicateImageProvider(),
     "volces": VolcesProvider(),

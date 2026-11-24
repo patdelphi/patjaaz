@@ -9,14 +9,6 @@ export type TCanvasAddImagesToChatEvent = {
   height: number
 }[]
 
-export type TCanvasMagicGenerateEvent = {
-  fileId: string
-  base64: string
-  width: number
-  height: number
-  timestamp: string
-}
-
 export type TMaterialAddImagesToChatEvent = {
   filePath: string
   fileName: string
@@ -45,7 +37,6 @@ export type TEvents = {
 
   // ********** Canvas events - Start **********
   'Canvas::AddImagesToChat': TCanvasAddImagesToChatEvent
-  'Canvas::MagicGenerate': TCanvasMagicGenerateEvent
   'Canvas::SyncGeneratedImages': { canvasId: string }
   // ********** Canvas events - End **********
 

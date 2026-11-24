@@ -85,27 +85,30 @@ const SettingProviders = () => {
       )}
 
       {!isLoading &&
-        Object.keys(providers).filter((key) => key !== 'jaaz').map((key, index) => (
-          <div key={key} className="w-full">
-            {key === 'comfyui' ? (
-              <ComfyuiSetting
-                config={providers[key]}
-                onConfigChange={handleConfigChange}
-              />
-            ) : (
-              <CommonSetting
-                providerKey={key}
-                config={providers[key]}
-                onConfigChange={handleConfigChange}
-                onDeleteProvider={handleDeleteProvider}
-              />
-            )}
+        (() => {
+          const visibleKeys = Object.keys(providers).filter((key) => key !== 'jaaz')
+          return visibleKeys.map((key, index) => (
+            <div key={key} className="w-full">
+              {key === 'comfyui' ? (
+                <ComfyuiSetting
+                  config={providers[key]}
+                  onConfigChange={handleConfigChange}
+                />
+              ) : (
+                <CommonSetting
+                  providerKey={key}
+                  config={providers[key]}
+                  onConfigChange={handleConfigChange}
+                  onDeleteProvider={handleDeleteProvider}
+                />
+              )}
 
-            {index !== Object.keys(providers).length - 1 && (
-              <div className="my-6 border-t bg-border" />
-            )}
-          </div>
-        ))}
+              {index !== visibleKeys.length - 1 && (
+                <div className="my-6 border-t bg-border" />
+              )}
+            </div>
+          ))
+        })()}
 
       <div className="flex fixed bottom-0 left-[calc(var(--sidebar-width))] gap-1 right-0 px-1">
         <Button onClick={handleSave} className="w-1/2" size="lg">

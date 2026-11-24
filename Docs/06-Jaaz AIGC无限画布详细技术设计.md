@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS comfy_instances (
     base_url TEXT NOT NULL,                   -- 允许带反向代理路径前缀，如 https://host/comfy
     auth_type TEXT NOT NULL DEFAULT 'none' CHECK (auth_type IN ('none', 'bearer', 'basic', 'header')),
     auth_header_name TEXT DEFAULT '',         -- auth_type='header' 时使用，如 X-API-Key
-    auth_secret_ref TEXT DEFAULT '',          -- 密钥引用键（不直接存明文或下发前端）
+    auth_secret TEXT DEFAULT '',              -- 密钥存储字段（接口响应统一掩码，更新时掩码占位不覆盖原值）
     max_concurrency INTEGER NOT NULL DEFAULT 1,
     timeout_sec INTEGER NOT NULL DEFAULT 600,
     enabled INTEGER NOT NULL DEFAULT 1,
@@ -135,15 +135,19 @@ CREATE TABLE IF NOT EXISTS comfy_instances (
     updated_at TEXT DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+ALTER TABLE comfy_workflows ADD COLUMN display_name TEXT NOT NULL DEFAULT '';     -- 管理端/选框展示名
 ALTER TABLE comfy_workflows ADD COLUMN capability TEXT NOT NULL DEFAULT 't2i';
 ALTER TABLE comfy_workflows ADD COLUMN output_kind TEXT NOT NULL DEFAULT 'image'; -- image | video | audio
 ALTER TABLE comfy_workflows ADD COLUMN instance_id TEXT DEFAULT '';               -- 空表示由调度器按能力自动路由
+ALTER TABLE comfy_workflows ADD COLUMN source_mode TEXT NOT NULL DEFAULT 'db';    -- db | pack_dir | pack_pair
+ALTER TABLE comfy_workflows ADD COLUMN source_path TEXT NOT NULL DEFAULT '';      -- 外部工作流包目录或主文件路径
 ALTER TABLE comfy_workflows ADD COLUMN seed_strategy TEXT NOT NULL DEFAULT 'random'; -- random | fixed | param
 ALTER TABLE comfy_workflows ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE comfy_workflows ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE comfy_workflows ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;        -- 1=启用（Agent 可见）, 0=禁用（不暴露给 Agent）
+ALTER TABLE comfy_workflows ADD COLUMN checksum TEXT NOT NULL DEFAULT '';         -- api+config SHA-256，用于同步去重与变更识别
 ```
 
-同时补全工作流编辑端点：现有 `settings.py` 仅提供 `create_workflow`、`list_workflows`、`delete_workflow`，需新增 `PUT /api/settings/comfyui/workflow/{id}`，允许修改名称、能力标签、输入映射、输出类型、绑定实例与启用状态，并在保存后重新加载注册表。
+同时补全工作流编辑与开关端点：新增独立路由 `server/routers/comfyui_router.py`（前缀 `/api/settings/comfyui`），提供 `PUT /api/settings/comfyui/workflows/{id}`、`PATCH /api/settings/comfyui/workflows/{id}/enabled`、`POST /api/settings/comfyui/workflows/import_pair`、`POST /api/settings/comfyui/workflows/scan`、`POST /api/settings/comfyui/workflows/draft_config`、`POST /api/settings/comfyui/workflows/{id}/export` 与多实例 `/instances/*` 管理端点（详见 [3.6 节](#36-外部文件组工作流包规范与启停开关管理)），在保存或切换开关后立即刷新 `tool_service` 注册表。
 
 ### 1.3 懒迁移策略
 
@@ -333,6 +337,58 @@ class CapabilityProvider(Protocol):
 ```
 
 扩展注册：ComfyUI 作为内置默认 `CapabilityProvider`，后续接入 OpenAI TTS、Gemini TTS、ElevenLabs、火山 TTS 或独立音乐/ASR API 时，只需实现同一 `Protocol` 并在能力注册表中挂载，Agent 工具无需改动。
+
+### 3.6 外部文件组工作流包规范与启停开关管理
+
+当前工作流导入需在弹窗内手动点击几十个节点参数并二次拼接字段，极易出错且难以在本地备份、分享和复用。M1 主体将其改造为“外部文件组导入 + 声明式配置 + 管理端启停开关”模式：
+
+1. **目录与成对文件约定**（固定项目内目录 `<repo_root>/workflows/`）：
+   - **子目录包形式**：`workflows/<workflow_dir>/workflow.api.json`（ComfyUI `Export (API)` 导出的节点图）与 `workflows/<workflow_dir>/jaaz.workflow.json`（Jaaz 能力与参数映射配置）。
+   - **平铺双文件形式**：`workflows/<name>.api.json` 与同前缀 `workflows/<name>.jaaz.json`（便于批量上传或单目录平铺管理）。
+2. **`jaaz.workflow.json` Schema v1 示例**：
+
+```json
+{
+  "schema_version": 1,
+  "name": "text2image_moss",
+  "display_name": "MOSS 文生图",
+  "capability": "t2i",
+  "output_kind": "image",
+  "enabled": true,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "使用 MOSS 工作流生成单张图像。",
+  "inputs": [
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "6",
+      "node_input_name": "text",
+      "default_value": "",
+      "description": "正向画面描述，支持中英文"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": true,
+      "node_id": "19",
+      "node_input_name": "aspect_ratio",
+      "default_value": "1:1 (Square)",
+      "options": ["1:1 (Square)", "16:9 (Widescreen)", "9:16 (Portrait Widescreen)"],
+      "description": "画面比例，必须原样传入下拉枚举值"
+    }
+  ]
+}
+```
+
+3. **严格静态校验与 AI Agent 直接导入**：
+   - 导入或扫描目录时，校验 API JSON 必须包含带 `class_type` 的节点字典，若检测到包含 `nodes` 数组与 `links` 数组则明确拒绝，提示“这是 ComfyUI 编辑画布 JSON，请改为导出 API JSON（`Workflow -> Export (API)`）”。
+   - 逐项校验 `inputs[].node_id` 与 `inputs[].node_input_name` 是否真实存在于 API JSON；存在非法节点引用或缺失必填字段时，导入报错或标记校验状态（不注册为可用工具）。
+   - **AI Agent 直接完成导入**：提供两种互补路径——① **外部 Coding AI Agent 路径**：配套 `workflows/jaaz.workflow.schema.json`、项目 Skill `.agents/skills/import-comfyui-workflow/SKILL.md` 与 `server/scripts/workflow_cli.py`（`inspect` 提取节点与 `/object_info` 枚举 -> AI 生成配置 -> `validate`/`install` 直接落盘入库，重启或打开管理页自动热同步）；② **应用内置 AI 路径**：管理端「AI 自动解析导入」调用 `/api/settings/comfyui/workflows/ai_import`，复用当前已配置文本大模型与 `/object_info` 生成配置并在校验失败时自动二次纠错后一步落盘生效；同时保留离线规则草稿生成与旧记录导出能力。
+4. **管理端查看与开关隔离**：
+   - 设置页工作流列表直接展示：展示名、工具标识、能力标签（`t2i`/`i2i`/`t2v`/`tts` 等）、输出类型、来源路径/模式、绑定实例、参数数量与节点校验状态；
+   - 每个工作流提供 **启用/关闭（`enabled`）Switch 开关**：切换后持久化写入数据库（外部文件组同步回写对应配置文件中的 `enabled` 标志）并立即刷新 `tool_service`；**`enabled = false` 的工作流从 `tool_service` 与 `/api/list_tools` 移除，Agent 无法发现或调用**；已有历史聊天记录与画布结果展示不受影响。
 
 **API Key 掩码策略（修复 `GET /api/config` 明文泄漏）**：
 - `GET /api/config` 返回前对所有 `api_key` 及实例 `auth_secret` 字段做掩码处理：长度大于 8 时保留前 3 后 4 位（如 `sk-****1234`），否则统一返回 `********`；

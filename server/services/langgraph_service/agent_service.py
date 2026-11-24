@@ -5,8 +5,7 @@ from .agent_manager import AgentManager
 import traceback
 from utils.http_client import HttpClient
 from langgraph_swarm import create_swarm  # type: ignore
-from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
+from services.llm_adapters import create_chat_model
 from services.websocket_service import send_to_websocket  # type: ignore
 from services.config_service import config_service
 from typing import Optional, List, Dict, Any, cast, Set, TypedDict
@@ -136,35 +135,8 @@ async def langgraph_multi_agent(
 
 
 def _create_text_model(text_model: ModelInfo) -> Any:
-    """创建语言模型实例"""
-    model = text_model.get('model')
-    provider = text_model.get('provider')
-    url = text_model.get('url')
-    api_key = config_service.app_config.get(  # type: ignore
-        provider, {}).get("api_key", "")
-
-    # TODO: Verify if max token is working
-    # max_tokens = text_model.get('max_tokens', 8148)
-
-    if provider == 'ollama':
-        return ChatOllama(
-            model=model,
-            base_url=url,
-        )
-    else:
-        # Create httpx client with SSL configuration for ChatOpenAI
-        http_client = HttpClient.create_sync_client()
-        http_async_client = HttpClient.create_async_client()
-        return ChatOpenAI(
-            model=model,
-            api_key=api_key,  # type: ignore
-            timeout=300,
-            base_url=url,
-            temperature=0,
-            # max_tokens=max_tokens, # TODO: 暂时注释掉有问题的参数
-            http_client=http_client,
-            http_async_client=http_async_client
-        )
+    """按协议配置创建语言模型实例（OpenAI / Anthropic / Gemini / Compatible / Ollama）。"""
+    return create_chat_model(dict(text_model))
 
 
 async def _handle_error(error: Exception, session_id: str) -> None:

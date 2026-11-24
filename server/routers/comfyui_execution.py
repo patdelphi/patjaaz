@@ -1,6 +1,7 @@
-"""程序说明：封装 ComfyUI 工作流执行、图片上传、WebSocket 进度监听与 /history 降级恢复。"""
+"""程序说明：封装 ComfyUI 工作流执行、图片上传、多实例鉴权头注入、WebSocket 进度监听与 /history 降级恢复。"""
 import asyncio
 from datetime import timedelta
+import inspect
 import json
 import time
 import urllib.parse
@@ -12,6 +13,12 @@ from rich import print as pprint
 from rich.progress import BarColumn, Column, Progress, Table, TimeElapsedColumn
 import websockets
 
+from services.comfy_instance_service import (
+    build_comfy_http_url,
+    build_comfy_ws_url,
+    comfy_instance_service,
+    normalize_comfy_base_url,
+)
 from services.stream_service import update_stream_status
 from services.websocket_service import send_to_websocket
 from utils.comfyui_history import COMFY_OUTPUT_KEYS, history_output_urls
@@ -44,15 +51,23 @@ def _extract_http_error_detail(exc: httpx.HTTPStatusError) -> str:
     return text or f"ComfyUI HTTP error {status_code}"
 
 
-async def check_comfy_server_running(base_url: str) -> bool:
-    """检查目标 ComfyUI 服务是否可用。"""
+async def check_comfy_server_running(
+    base_url: str, headers: Optional[Dict[str, str]] = None
+) -> bool:
+    """检查目标 ComfyUI 服务是否可用（兼容子路径前缀与鉴权头）。"""
     if not base_url:
         return False
     try:
+        normalized = normalize_comfy_base_url(base_url)
         async with HttpClient.create(timeout=10) as client:
-            url = f"{base_url.rstrip('/')}/api/prompt"
-            response = await client.get(url)
-            return response.status_code == 200
+            for endpoint in ("/api/prompt", "/system_stats"):
+                response = await client.get(
+                    build_comfy_http_url(normalized, endpoint),
+                    headers=headers or None,
+                )
+                if response.status_code == 200:
+                    return True
+            return False
     except Exception:
         return False
 
@@ -65,11 +80,13 @@ async def execute(
     local_paths: bool = False,
     timeout: float = 300,
     ctx: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    instance_id: Optional[str] = None,
 ):
-    """提交并等待 ComfyUI 工作流执行完成。"""
+    """提交并等待 ComfyUI 工作流执行完成，支持鉴权头、子路径前缀与取消联动。"""
     ctx = ctx if ctx is not None else {}
-    normalized_url = str(base_url).rstrip("/")
-    if not await check_comfy_server_running(normalized_url):
+    normalized_url = normalize_comfy_base_url(base_url)
+    if not await check_comfy_server_running(normalized_url, headers=headers):
         pprint(f"[bold red]ComfyUI not running on specified address ({normalized_url})[/bold red]")
         raise ComfyUIUnavailableError(f"ComfyUI not running on specified address ({normalized_url})")
 
@@ -82,13 +99,30 @@ async def execute(
         print("Queuing comfyui workflow")
 
     execution = WorkflowExecution(
-        workflow, normalized_url, verbose, progress, local_paths, timeout, ctx=ctx
+        workflow,
+        normalized_url,
+        verbose,
+        progress,
+        local_paths,
+        timeout,
+        ctx=ctx,
+        headers=headers,
+        instance_id=instance_id,
     )
 
+    session_id = ctx.get("session_id")
     try:
         if wait:
             await execution.connect()
         await execution.queue()
+        if session_id and execution.prompt_id:
+            comfy_instance_service.register_active_prompt(
+                session_id,
+                normalized_url,
+                execution.prompt_id,
+                headers=headers,
+                instance_id=instance_id,
+            )
         if wait:
             await execution.watch_execution()
             end = time.time()
@@ -105,7 +139,13 @@ async def execute(
             pprint(f"[bold green]\nWorkflow execution completed ({elapsed})[/bold green]")
         else:
             pprint("[bold green]Workflow queued[/bold green]")
+    except asyncio.CancelledError:
+        if session_id:
+            await comfy_instance_service.cancel_session_prompts(session_id)
+        raise
     finally:
+        if session_id and execution.prompt_id:
+            comfy_instance_service.unregister_active_prompt(session_id, execution.prompt_id)
         if progress:
             progress.stop()
         await execution.close_ws()
@@ -151,6 +191,8 @@ class WorkflowExecution:
         local_paths: bool,
         timeout: float = 300,
         ctx: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        instance_id: Optional[str] = None,
     ):
         self.workflow = workflow or {}
         self.base_url = str(base_url).rstrip("/")
@@ -174,6 +216,8 @@ class WorkflowExecution:
         self.ws_core = "ws://"
         self.timeout = float(timeout) if timeout and timeout > 0 else 300.0
         self.ctx = ctx if ctx is not None else {}
+        self.headers = dict(headers or {})
+        self.instance_id = instance_id
 
     async def close_ws(self) -> None:
         """确保关闭 WebSocket 连接，防止句柄泄漏。"""
@@ -186,21 +230,28 @@ class WorkflowExecution:
                 self.ws = None
 
     async def connect(self):
-        """建立 ComfyUI /ws 连接。"""
-        self.ws_core = "wss://" if self.base_url.startswith("https") else "ws://"
-        ws_url = self.base_url.split("//", 1)[1]
-        if "/" in ws_url:
-            ws_url = ws_url.split("/", 1)[0]
-        self.ws = await websockets.connect(
-            f"{self.ws_core}{ws_url}/ws?clientId={self.client_id}"
-        )
+        """建立 ComfyUI /ws 连接（完整保留子路径前缀并透传鉴权请求头）。"""
+        ws_url = build_comfy_ws_url(self.base_url, self.client_id)
+        self.ws_core = "wss://" if ws_url.startswith("wss://") else "ws://"
+        connect_kwargs: Dict[str, Any] = {}
+        if self.headers:
+            params = inspect.signature(websockets.connect).parameters
+            if "additional_headers" in params:
+                connect_kwargs["additional_headers"] = self.headers
+            elif "extra_headers" in params:
+                connect_kwargs["extra_headers"] = self.headers
+        self.ws = await websockets.connect(ws_url, **connect_kwargs)
 
     async def queue(self):
         """提交工作流到 ComfyUI /prompt，并校验响应状态码。"""
         data = {"prompt": self.workflow, "client_id": self.client_id}
         async with HttpClient.create() as client:
             try:
-                response = await client.post(f"{self.base_url}/prompt", json=data)
+                response = await client.post(
+                    build_comfy_http_url(self.base_url, "/prompt"),
+                    json=data,
+                    headers=self.headers or None,
+                )
                 response.raise_for_status()
                 body = response.json()
                 self.prompt_id = body["prompt_id"]
@@ -219,7 +270,10 @@ class WorkflowExecution:
         if not self.prompt_id:
             return False
         async with HttpClient.create(timeout=10.0) as client:
-            response = await client.get(f"{self.base_url}/history/{self.prompt_id}")
+            response = await client.get(
+                build_comfy_http_url(self.base_url, f"/history/{self.prompt_id}"),
+                headers=self.headers or None,
+            )
             if response.status_code != 200:
                 return False
             response_body = response.json()
@@ -490,15 +544,24 @@ class WorkflowExecution:
         raise ComfyUIExecutionError(formatted)
 
 
-async def upload_image(image, base_url: str, filename=None, subfolder="jaaz") -> str:
+async def upload_image(
+    image,
+    base_url: str,
+    filename=None,
+    subfolder="jaaz",
+    headers: Optional[Dict[str, str]] = None,
+) -> str:
     """上传参考图到 ComfyUI /upload/image，并校验 HTTP 状态码。"""
-    normalized_url = str(base_url).rstrip("/")
+    normalized_url = normalize_comfy_base_url(base_url)
     files = {"image": (filename, image)}
     data = {"type": "input", "subfolder": subfolder, "overwrite": "false"}
     async with HttpClient.create() as client:
         try:
             response = await client.post(
-                f"{normalized_url}/upload/image", files=files, data=data
+                build_comfy_http_url(normalized_url, "/upload/image"),
+                files=files,
+                data=data,
+                headers=headers or None,
             )
             response.raise_for_status()
             body = response.json()

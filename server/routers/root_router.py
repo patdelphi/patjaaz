@@ -78,14 +78,15 @@ def filter_available_tools(
         if provider != "comfyui" and not provider_api_key:
             continue
 
-        res.append(
-            {
-                "id": tool_id,
-                "provider": provider,
-                "type": tool_info.get("type", ""),
-                "display_name": tool_info.get("display_name", ""),
-            }
-        )
+        item: ToolInfoJson = {
+            "id": tool_id,
+            "provider": provider,
+            "type": tool_info.get("type", ""),
+            "display_name": tool_info.get("display_name", ""),
+        }
+        if tool_info.get("capability"):
+            item["capability"] = tool_info.get("capability")
+        res.append(item)
     return res
 
 
@@ -124,18 +125,24 @@ async def get_models() -> list[ModelInfo]:
             if not provider_url or not provider_api_key:
                 continue
 
+            protocol = provider_config.get("protocol")
             models = provider_config.get("models", {})
             for model_name, model in models.items():
                 model_type = model.get("type", "text")
                 if model_type == "text":
-                    res.append(
-                        {
-                            "provider": provider,
-                            "model": model_name,
-                            "url": provider_url,
-                            "type": model_type,
-                        }
-                    )
+                    item: ModelInfo = {
+                        "provider": provider,
+                        "model": model_name,
+                        "url": provider_url,
+                        "type": model_type,
+                    }
+                    if protocol:
+                        item["protocol"] = protocol
+                    if isinstance(model.get("capabilities"), dict):
+                        item["capabilities"] = model["capabilities"]
+                    if provider_config.get("max_tokens"):
+                        item["max_tokens"] = provider_config["max_tokens"]
+                    res.append(item)
         return res
     except HTTPException:
         raise

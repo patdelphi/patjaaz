@@ -12,7 +12,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 print('Importing websocket_router')
 from routers.websocket_router import *  # DO NOT DELETE THIS LINE, OTHERWISE, WEBSOCKET WILL NOT WORK
 print('Importing routers')
-from routers import auth as auth_router, config_router, image_router, root_router, workspace, canvas, ssl_test, chat_router, settings, tool_confirmation
+from routers import auth as auth_router, comfyui_router, config_router, image_router, root_router, workspace, canvas, ssl_test, chat_router, settings, tool_confirmation
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,7 @@ from services.config_service import config_service
 print('Importing tool_service')
 from services.tool_service import tool_service
 from services.auth_service import SESSION_COOKIE_NAME, auth_service
+from services.comfy_workflow_pack import sync_workflows_dir_to_db
 
 BASE_CSP_POLICY = (
     "default-src 'self'; "
@@ -79,6 +80,10 @@ async def lifespan(app: FastAPI):
     # onstartup
     auth_service.require_configured()
     await initialize()
+    try:
+        await sync_workflows_dir_to_db()
+    except Exception as sync_exc:
+        print(f"Warning syncing workflows/ directory on startup: {sync_exc}")
     await tool_service.initialize()
     reaper_task = asyncio.create_task(_expired_socket_reaper())
     try:
@@ -115,6 +120,7 @@ async def require_access_code(request: Request, call_next):
 print('Including routers')
 app.include_router(auth_router.router)
 app.include_router(config_router.router)
+app.include_router(comfyui_router.router)
 app.include_router(settings.router)
 app.include_router(root_router.router)
 app.include_router(canvas.router)

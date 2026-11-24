@@ -5,14 +5,9 @@ import { installApiAuthInterceptor } from '@/lib/apiFetch'
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import { PostHogProvider } from 'posthog-js/react'
 import '@/assets/style/index.css'
 
 installApiAuthInterceptor()
-
-const options = {
-  api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
-}
 
 const rootElement = document.getElementById('root')!
 if (!rootElement.innerHTML) {
@@ -20,11 +15,9 @@ if (!rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <AuthGate>
-        <PostHogProvider apiKey={import.meta.env.VITE_PUBLIC_POSTHOG_KEY} options={options}>
-          <SocketProvider>
-            <App />
-          </SocketProvider>
-        </PostHogProvider>
+        <SocketProvider>
+          <App />
+        </SocketProvider>
       </AuthGate>
     </StrictMode>
   )

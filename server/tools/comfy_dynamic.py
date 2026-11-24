@@ -1,4 +1,4 @@
-"""程序说明：将数据库中的 ComfyUI 工作流动态注册为 LangChain 工具，完成参数校验、种子保留与加锁画布写入。"""
+"""程序说明：将数据库中的 ComfyUI 工作流动态注册为 LangChain 工具，完成参数校验、多实例调度、上传去重、种子策略与加锁画布写入。"""
 from __future__ import annotations
 
 import copy
@@ -9,13 +9,15 @@ import random
 import time
 import traceback
 from typing import Annotated, Any, Callable, Dict, List, Optional
+import uuid
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, InjectedToolCallId, tool
 from pydantic import BaseModel, Field, create_model
 
 from routers.comfyui_execution import upload_image
-from services.config_service import FILES_DIR, IMAGE_FORMATS, config_service
+from services.comfy_instance_service import comfy_instance_service
+from services.config_service import FILES_DIR, IMAGE_FORMATS
 from services.db_service import db_service
 from services.websocket_service import broadcast_session_update, send_to_websocket
 from tools.video_generation.video_canvas_utils import generate_new_video_element
@@ -56,8 +58,9 @@ def apply_workflow_inputs_and_seeds(
     input_defs: List[Dict[str, Any]],
     required_data: Dict[str, Any],
     seed_generator: Optional[Callable[[], int]] = None,
+    seed_strategy: str = "random",
 ) -> Dict[str, Any]:
-    """注入用户参数并按节点精确随机化未显式指定的 seed / noise_seed。"""
+    """注入用户参数并按 seed_strategy（random/fixed/param）处理节点 seed / noise_seed。"""
     updated = copy.deepcopy(workflow_dict)
     explicit_node_fields: set[tuple[str, str]] = set()
 
@@ -78,16 +81,17 @@ def apply_workflow_inputs_and_seeds(
                     node_inputs[node_input_name] = value
                     explicit_node_fields.add((node_key, str(node_input_name)))
 
-    rng = seed_generator or (lambda: random.randint(1, (1 << 32) - 1))
-    for node_id, node in updated.items():
-        if not isinstance(node, dict):
-            continue
-        node_inputs = node.get("inputs")
-        if not isinstance(node_inputs, dict):
-            continue
-        for seed_key in SEED_FIELD_NAMES:
-            if seed_key in node_inputs and (str(node_id), seed_key) not in explicit_node_fields:
-                node_inputs[seed_key] = rng()
+    if seed_strategy == "random":
+        rng = seed_generator or (lambda: random.randint(1, (1 << 32) - 1))
+        for node_id, node in updated.items():
+            if not isinstance(node, dict):
+                continue
+            node_inputs = node.get("inputs")
+            if not isinstance(node_inputs, dict):
+                continue
+            for seed_key in SEED_FIELD_NAMES:
+                if seed_key in node_inputs and (str(node_id), seed_key) not in explicit_node_fields:
+                    node_inputs[seed_key] = rng()
 
     return updated
 
@@ -106,7 +110,6 @@ def _python_type(param_type: str, default: Any):
 def _build_input_schema(wf: Dict[str, Any]) -> type[BaseModel]:
     """
     Build a Pydantic model named '<WorkflowName>Input' from workflow['inputs'].
-    The `inputs` column is stored in DB as JSON text -> parse first.
     """
     try:
         input_defs: List[Dict[str, Any]] = (
@@ -120,9 +123,12 @@ def _build_input_schema(wf: Dict[str, Any]) -> type[BaseModel]:
         name = param.get("name")
         if not name:
             continue
-        py_t = _python_type(param.get("type"), param.get("default_value"))
+        py_t = _python_type(str(param.get("type") or "string"), param.get("default_value"))
         default_val = param.get("default_value")
-        desc = param.get("description", "")
+        desc = str(param.get("description") or "")
+        options = param.get("options")
+        if isinstance(options, list) and options:
+            desc = f"{desc} Allowed options: {', '.join(str(x) for x in options)}."
         is_required = param.get("required", False)
 
         if is_required:
@@ -157,16 +163,24 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         tool_call_id: Annotated[str, InjectedToolCallId],
         **kwargs,
     ) -> str:
-        """运行动态注册的 ComfyUI 工作流，并将生成的媒体文件写入画布。"""
+        """运行动态注册的 ComfyUI 工作流，并将生成的媒体文件写入画布或返回访问链接。"""
         print("🛠️ tool_call_id", tool_call_id)
         ctx = config.get("configurable", {})
         canvas_id = ctx.get("canvas_id", "")
         session_id = ctx.get("session_id", "")
         print("🛠️canvas_id", canvas_id, "session_id", session_id)
         ctx["tool_call_id"] = tool_call_id
-        api_url = str(
-            config_service.app_config.get("comfyui", {}).get("url", "")
-        ).rstrip("/")
+
+        try:
+            instance = await comfy_instance_service.resolve_instance(wf.get("instance_id"))
+        except Exception as exc:
+            await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
+            return f"image generation failed: {str(exc)}"
+
+        api_url = str(instance["base_url"]).rstrip("/")
+        auth_headers = dict(instance.get("headers") or {})
+        instance_id = str(instance.get("id") or "default")
+        timeout_sec = float(instance.get("timeout_sec") or 600)
 
         required_data = dict(kwargs)
         try:
@@ -177,9 +191,21 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                 filename = os.path.basename(image_path)
                 with open(image_path, "rb") as image_file:
                     image_bytes = image_file.read()
-                image_stream = BytesIO(image_bytes)
-                image_name = await upload_image(image_stream, api_url, filename)
-                required_data[key] = image_name
+                sha256_hex = comfy_instance_service.compute_bytes_sha256(image_bytes)
+                cached_name = comfy_instance_service.get_cached_upload(
+                    instance_id, sha256_hex
+                )
+                if cached_name:
+                    required_data[key] = cached_name
+                else:
+                    image_stream = BytesIO(image_bytes)
+                    image_name = await upload_image(
+                        image_stream, api_url, filename, headers=auth_headers
+                    )
+                    comfy_instance_service.set_cached_upload(
+                        instance_id, sha256_hex, image_name
+                    )
+                    required_data[key] = image_name
         except (PathSecurityError, FileNotFoundError) as exc:
             await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
             return f"image generation failed: {str(exc)}"
@@ -195,12 +221,40 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         except Exception:
             input_defs = []
 
+        seed_strategy = str(wf.get("seed_strategy") or "random")
         workflow_dict = apply_workflow_inputs_and_seeds(
-            workflow_dict, input_defs, required_data
+            workflow_dict,
+            input_defs,
+            required_data,
+            seed_strategy=seed_strategy,
         )
 
+        job_id = f"job_{uuid.uuid4().hex[:12]}"
         try:
-            generator = ComfyUIWorkflowRunner(workflow_dict, api_url)
+            await db_service.create_job(
+                {
+                    "id": job_id,
+                    "session_id": session_id,
+                    "canvas_id": canvas_id,
+                    "tool_call_id": tool_call_id,
+                    "capability": wf.get("capability") or "t2i",
+                    "provider": "comfyui",
+                    "instance_id": instance_id,
+                    "workflow_id": wf["id"],
+                    "status": "running",
+                }
+            )
+        except Exception as job_exc:
+            print(f"[comfy_dynamic] Warning creating job record: {job_exc}")
+
+        try:
+            generator = ComfyUIWorkflowRunner(
+                workflow_dict,
+                api_url,
+                headers=auth_headers,
+                timeout=timeout_sec,
+                instance_id=instance_id,
+            )
             outputs = await generator.generate(ctx=ctx)
             require_generation_outputs(outputs)
             if not isinstance(outputs, list) or (
@@ -296,15 +350,36 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                         },
                     )
 
-            markdown_images = [
-                f"![id: {file_info['filename']}]({file_info['url']})"
-                for file_info in generated_files_info
-            ]
-            return f"workflow executed successfully {', '.join(markdown_images)}"
+            try:
+                await db_service.update_job_status(
+                    job_id,
+                    status="completed",
+                    progress_pct=100,
+                    finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                )
+            except Exception:
+                pass
+
+            links = []
+            for file_info in generated_files_info:
+                if file_info["mime_type"].startswith("audio"):
+                    links.append(f"[{file_info['filename']}]({file_info['url']})")
+                else:
+                    links.append(f"![id: {file_info['filename']}]({file_info['url']})")
+            return f"workflow executed successfully {', '.join(links)}"
 
         except Exception as e:
             print(f"Error generating image: {str(e)}")
             traceback.print_exc()
+            try:
+                await db_service.update_job_status(
+                    job_id,
+                    status="failed",
+                    error=str(e),
+                    finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                )
+            except Exception:
+                pass
             await send_to_websocket(session_id, {"type": "error", "error": str(e)})
             return f"image generation failed: {str(e)}"
 

@@ -185,17 +185,28 @@ def generate_video_file_id() -> str:
 
 
 async def get_video_info_and_save(
-    url: str, file_path_without_extension: str
+    url: str,
+    file_path_without_extension: str,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Tuple[str, int, int, str]:
-    # Fetch the video asynchronously
-    async with HttpClient.create_aiohttp() as session:
-        async with session.get(url) as response:
-            video_content = await response.read()
-
-    # Save to temporary mp4 file first
+    """流式下载远程视频到临时文件后原子落盘并探测尺寸。"""
     temp_path = f"{file_path_without_extension}.mp4"
-    async with aiofiles.open(temp_path, "wb") as out_file:
-        await out_file.write(video_content)
+    part_path = f"{temp_path}.part"
+    try:
+        async with HttpClient.create_aiohttp() as session:
+            async with session.get(url, headers=headers or None) as response:
+                response.raise_for_status()
+                async with aiofiles.open(part_path, "wb") as out_file:
+                    async for chunk in response.content.iter_chunked(1024 * 64):
+                        if chunk:
+                            await out_file.write(chunk)
+        os.replace(part_path, temp_path)
+    finally:
+        if os.path.exists(part_path):
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
     print("🎥 Video saved to", temp_path)
 
     try:

@@ -19,13 +19,11 @@ const CanvasPopbarWrapper = () => {
 
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [showAddToChat, setShowAddToChat] = useState(false)
-  const [showMagicGenerate, setShowMagicGenerate] = useState(false)
   const [showTextBackground, setShowTextBackground] = useState(false)
   const [showStrokeWidth, setShowStrokeWidth] = useState(false)
   const [showBlockArrow, setShowBlockArrow] = useState(false)
 
   const selectedImagesRef = useRef<TCanvasAddImagesToChatEvent>([])
-  const selectedElementsRef = useRef<OrderedExcalidrawElement[]>([])
   const selectedTextElementsRef = useRef<OrderedExcalidrawElement[]>([])
   const selectedStrokeElementsRef = useRef<ExcalidrawElement[]>([])
   const selectedBlockArrowsRef = useRef<ExcalidrawElement[]>([])
@@ -36,7 +34,6 @@ const CanvasPopbarWrapper = () => {
     if (Object.keys(selectedIds).length === 0) {
       setPos(null)
       setShowAddToChat(false)
-      setShowMagicGenerate(false)
       setShowTextBackground(false)
       setShowStrokeWidth(false)
       setShowBlockArrow(false)
@@ -56,9 +53,6 @@ const CanvasPopbarWrapper = () => {
       (element) => selectedIds[element.id] && isBlockArrowElement(element)
     )
 
-    selectedElementsRef.current = elements.filter(
-      (element) => selectedIds[element.id] && element.index !== null
-    ) as OrderedExcalidrawElement[]
     selectedTextElementsRef.current = selectedTextElements
     selectedStrokeElementsRef.current = selectedStrokeElements
     selectedBlockArrowsRef.current = selectedBlockArrows
@@ -71,11 +65,7 @@ const CanvasPopbarWrapper = () => {
     setShowBlockArrow(hasBlockArrow)
 
     const hasSelectedImages = selectedImages.length > 0
-    const selectedCount = Object.keys(selectedIds).length
-    const hasMagic = selectedCount >= 2
-    setShowMagicGenerate(hasMagic)
-
-    if (!hasSelectedImages && !hasMagic && !hasText && !hasStroke && !hasBlockArrow) {
+    if (!hasSelectedImages && !hasText && !hasStroke && !hasBlockArrow) {
       setPos(null)
       return
     }
@@ -127,19 +117,16 @@ const CanvasPopbarWrapper = () => {
       <AnimatePresence>
         {pos &&
           (showAddToChat ||
-            showMagicGenerate ||
             showTextBackground ||
             showStrokeWidth ||
             showBlockArrow) && (
             <CanvasPopbarContainer
               pos={pos}
               selectedImages={selectedImagesRef.current}
-              selectedElements={selectedElementsRef.current}
               selectedTextElements={selectedTextElementsRef.current}
               selectedStrokeElements={selectedStrokeElementsRef.current}
               selectedBlockArrows={selectedBlockArrowsRef.current}
               showAddToChat={showAddToChat}
-              showMagicGenerate={showMagicGenerate}
               showTextBackground={showTextBackground}
               showStrokeWidth={showStrokeWidth}
               showBlockArrow={showBlockArrow}
