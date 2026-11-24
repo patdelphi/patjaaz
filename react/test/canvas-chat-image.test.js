@@ -1,6 +1,9 @@
 // 画布图片进入聊天附件的路径归一化回归测试。
 import { describe, expect, it } from 'vitest'
-import { normalizeCanvasImageForChat } from '../src/lib/canvasChatImage'
+import {
+  extractSelectedCanvasTexts,
+  normalizeCanvasImageForChat,
+} from '../src/lib/canvasChatImage'
 
 const image = { fileId: 'element-file-id', width: 120, height: 80 }
 
@@ -55,5 +58,22 @@ describe('canvas image chat attachments', () => {
         dataURL: 'data:image/png;base64,aGVsbG8=',
       })
     ).toBeNull()
+  })
+
+  it('extracts standalone and container-bound script texts in reading order without duplicates', () => {
+    const elements = [
+      { id: 'rect-1', type: 'rectangle', x: 50, y: 100 },
+      { id: 'txt-2', type: 'text', x: 50, y: 260, text: '  脚本2：道具特写  ' },
+      { id: 'txt-1', type: 'text', x: 60, y: 120, containerId: 'rect-1', text: '脚本1：主角设定' },
+      { id: 'txt-del', type: 'text', x: 50, y: 10, isDeleted: true, text: '已删除脚本' },
+    ]
+    expect(
+      extractSelectedCanvasTexts(elements, {
+        'rect-1': true,
+        'txt-1': true,
+        'txt-2': true,
+        'txt-del': true,
+      })
+    ).toEqual(['脚本1：主角设定', '脚本2：道具特写'])
   })
 })

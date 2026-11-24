@@ -2,6 +2,7 @@ from models.tool_model import ToolInfoJson
 from services.db_service import db_service
 from .StreamProcessor import StreamProcessor
 from .agent_manager import AgentManager
+from .canvas_context import build_canvas_scene_context
 import traceback
 from utils.http_client import HttpClient
 from langgraph_swarm import create_swarm  # type: ignore
@@ -96,14 +97,27 @@ async def langgraph_multi_agent(
         # 0. 修复消息历史
         fixed_messages = _fix_chat_history(messages)
 
-        # 2. 文本模型
+        # 2. 文本模型与画布实时上下文摘要
         text_model_instance = _create_text_model(text_model)
+        canvas_scene_prompt = ""
+        if canvas_id:
+            try:
+                canvas_record = await db_service.get_canvas_data(canvas_id)
+                canvas_scene_prompt = build_canvas_scene_context(
+                    (canvas_record or {}).get("data") if isinstance(canvas_record, dict) else None
+                )
+            except Exception as canvas_exc:
+                print(f"[agent_service] Warning reading canvas context: {canvas_exc}")
+
+        combined_system_prompt = "\n\n".join(
+            p for p in (system_prompt or "", canvas_scene_prompt) if p.strip()
+        )
 
         # 3. 创建智能体
         agents = AgentManager.create_agents(
             text_model_instance,
             tool_list,  # 传入所有注册的工具
-            system_prompt or ""
+            combined_system_prompt,
         )
         agent_names = [agent.name for agent in agents]
         print('👇agent_names', agent_names)
@@ -146,7 +160,14 @@ async def _handle_error(error: Exception, session_id: str) -> None:
     print(f"Full traceback:\n{tb_str}")
     traceback.print_exc()
 
+    message = str(error)
+    # 429 限流是模型提供商侧的并发/频率配额，给出可操作的提示
+    if getattr(error, 'status_code', None) == 429 or 'Error code: 429' in message:
+        message = (
+            f"{message}\n\n模型提供商返回 429（并发或频率配额已满）。已自动重试仍失败，"
+            "请稍后重试，或在设置中换用其他模型/提供商，或关闭同一密钥下的其他并发任务。"
+        )
     await send_to_websocket(session_id, cast(Dict[str, Any], {
         'type': 'error',
-        'error': str(error)
+        'error': message
     }))

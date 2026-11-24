@@ -1,18 +1,43 @@
 """程序说明：解析、严格校验、自动生成草稿、扫描同步并导出项目 workflows/ 目录下的 ComfyUI 成对工作流文件。"""
 from __future__ import annotations
 
+import copy
+import asyncio
 import hashlib
 import json
 import os
 import re
+import shutil
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.path_security import PathSecurityError, safe_join
 
+
+def _resolve_workflows_dir() -> str:
+    """确定可写的工作流目录：环境变量优先；PyInstaller 冻结时用 USER_DATA_DIR/workflows；源码运行用仓库 workflows/。"""
+    env_dir = str(os.getenv("JAAZ_WORKFLOWS_DIR") or "").strip()
+    if env_dir:
+        return os.path.abspath(env_dir)
+    if getattr(sys, "frozen", False):
+        user_data = str(os.getenv("USER_DATA_DIR") or "").strip()
+        if user_data:
+            return os.path.join(os.path.abspath(user_data), "workflows")
+    repo_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    return os.path.join(repo_root, "workflows")
+
+
 REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
-WORKFLOWS_DIR = os.path.join(REPO_ROOT, "workflows")
+WORKFLOWS_DIR = _resolve_workflows_dir()
+SOURCE_WORKFLOWS_DIR = os.path.join(WORKFLOWS_DIR, "source")
+RESERVED_WORKFLOW_SUBDIRS = {"source"}
+# 摘要中单个字符串值的最大保留长度，避免内置长提示词模板撑大 LLM 上下文
+SUMMARY_MAX_STRING_LEN = 200
+_SYNC_LOCK = asyncio.Lock()
 
 WORKFLOW_NAME_RE = re.compile(r"^[a-zA-Z0-9_]+$")
 
@@ -87,14 +112,25 @@ def validate_api_json(api_json: Any) -> List[str]:
         ]
 
     valid_nodes = 0
+    missing_class_nodes: List[str] = []
     for node_id, node in api_json.items():
-        if isinstance(node, dict) and isinstance(node.get("class_type"), str):
-            valid_nodes += 1
-            if "inputs" in node and not isinstance(node["inputs"], dict):
-                return [f"节点 {node_id} 的 inputs 必须为对象"]
+        if not isinstance(node, dict):
+            continue
+        ct = node.get("class_type")
+        if not isinstance(ct, str) or not ct.strip():
+            missing_class_nodes.append(str(node_id))
+            continue
+        valid_nodes += 1
+        if "inputs" in node and not isinstance(node["inputs"], dict):
+            return [f"节点 {node_id} 的 inputs 必须为对象"]
 
     if valid_nodes == 0:
         return ["API JSON 中未找到任何包含 class_type 的有效 ComfyUI 节点"]
+    if missing_class_nodes:
+        joined = ", ".join(missing_class_nodes[:8])
+        return [
+            f"节点 {joined} 缺少有效的 class_type（可能导出时缺失插件节点，请修复或重新通过 Export (API) 导出）"
+        ]
     return []
 
 
@@ -114,9 +150,36 @@ def compute_pack_checksum(
 
 
 def _sanitize_workflow_name(raw_name: str) -> str:
-    """将用户输入名称规范为合法的纯英文数字下划线工具标识。"""
-    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", (raw_name or "").strip()).strip("_")
+    """将用户输入名称规范为合法的纯英文数字下划线工具标识；含非 ASCII 字符时追加短哈希避免不同中文名冲突。"""
+    raw = (raw_name or "").strip()
+    cleaned = re.sub(r"[^a-zA-Z0-9_]+", "_", raw).strip("_")
+    if raw and any(ord(ch) > 127 for ch in raw):
+        digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:6]
+        cleaned = f"{cleaned}_{digest}" if cleaned else f"wf_{digest}"
     return cleaned or "custom_workflow"
+
+
+def unique_pack_name(
+    name: str,
+    source_file: str,
+    workflows_dir: str = WORKFLOWS_DIR,
+) -> str:
+    """若 workflows/<name>/ 已被另一个来源文件占用，则追加数字后缀，避免静默覆盖。"""
+    candidate = name
+    index = 2
+    while True:
+        cfg_path = os.path.join(workflows_dir, candidate, "jaaz.workflow.json")
+        if not os.path.isfile(cfg_path):
+            return candidate
+        try:
+            with open(cfg_path, "r", encoding="utf-8-sig") as f:
+                existing_src = str((json.load(f) or {}).get("source_file") or "")
+        except Exception:
+            existing_src = ""
+        if not existing_src or existing_src == source_file:
+            return candidate
+        candidate = f"{name}_{index}"
+        index += 1
 
 
 def validate_workflow_pack(
@@ -260,6 +323,13 @@ def validate_workflow_pack(
         "inputs": normalized_inputs,
         "outputs": config_json.get("outputs"),
     }
+    source_file = str(config_json.get("source_file") or "").strip()
+    source_sha256 = str(config_json.get("source_sha256") or "").strip()
+    if source_file:
+        normalized_config["source_file"] = source_file
+    if source_sha256:
+        normalized_config["source_sha256"] = source_sha256
+
     checksum = compute_pack_checksum(api_json, normalized_config)
     return {
         "valid": True,
@@ -426,6 +496,21 @@ def save_pack_to_workflows_dir(
 
     os.makedirs(workflows_dir, exist_ok=True)
     target_dir = safe_join(workflows_dir, wf_name)
+
+    # 同名目录已属于另一个来源文件时拒绝覆盖，提示调用方改名（自动导入走 unique_pack_name）
+    existing_cfg_path = os.path.join(target_dir, "jaaz.workflow.json")
+    new_src = str(config_json.get("source_file") or "")
+    if new_src and os.path.isfile(existing_cfg_path):
+        try:
+            with open(existing_cfg_path, "r", encoding="utf-8-sig") as f:
+                old_src = str((json.load(f) or {}).get("source_file") or "")
+        except Exception:
+            old_src = ""
+        if old_src and old_src != new_src:
+            raise WorkflowPackValidationError(
+                [f"工作流名称 '{wf_name}' 已被来源文件 '{old_src}' 占用，请更换 name 后再导入"]
+            )
+
     os.makedirs(target_dir, exist_ok=True)
 
     api_path = safe_join(target_dir, "workflow.api.json")
@@ -529,6 +614,8 @@ def scan_workflows_dir(workflows_dir: str = WORKFLOWS_DIR) -> Dict[str, Any]:
     entries = sorted(os.listdir(workflows_dir))
     # 1. 子目录形式: workflows/<dir>/{workflow.api.json, jaaz.workflow.json}
     for entry in entries:
+        if entry.startswith(".") or entry in RESERVED_WORKFLOW_SUBDIRS:
+            continue
         full = os.path.join(workflows_dir, entry)
         if not os.path.isdir(full):
             continue
@@ -597,6 +684,13 @@ def scan_workflows_dir(workflows_dir: str = WORKFLOWS_DIR) -> Dict[str, Any]:
     }
 
 
+def _truncate_summary_value(value: Any) -> Any:
+    """截断摘要中的超长字符串，保留长度信息，避免内置提示词模板撑爆 LLM 上下文。"""
+    if isinstance(value, str) and len(value) > SUMMARY_MAX_STRING_LEN:
+        return f"{value[:SUMMARY_MAX_STRING_LEN]}…(共 {len(value)} 字符，已截断)"
+    return value
+
+
 def summarize_api_json_for_agent(
     api_json_raw: Any,
     object_info: Optional[Dict[str, Any]] = None,
@@ -641,7 +735,7 @@ def summarize_api_json_for_agent(
             ):
                 continue
 
-            entry: Dict[str, Any] = {"value": input_val}
+            entry: Dict[str, Any] = {"value": _truncate_summary_value(input_val)}
             spec = None
             if isinstance(required_spec, dict) and input_name in required_spec:
                 spec = required_spec[input_name]
@@ -682,7 +776,77 @@ async def sync_workflows_dir_to_db(
     db: Any = None,
     workflows_dir: str = WORKFLOWS_DIR,
 ) -> Dict[str, Any]:
-    """扫描项目 workflows/ 目录并将有效成对工作流增量同步到 SQLite 数据库。"""
+    """扫描项目 workflows/ 目录并将有效成对工作流增量同步到 SQLite（同进程内串行，避免启动与页面刷新并发写）。"""
+    async with _SYNC_LOCK:
+        return await _sync_workflows_dir_to_db_unlocked(db, workflows_dir)
+
+
+def _workflow_settings_path() -> str:
+    """工作流相关用户开关的存放文件（位于 USER_DATA_DIR，不随仓库提交）。"""
+    user_data = str(os.getenv("USER_DATA_DIR") or "").strip()
+    if not user_data:
+        user_data = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_data"
+        )
+    return os.path.join(user_data, "workflow_settings.json")
+
+
+def get_auto_import_source_enabled() -> bool:
+    """是否允许服务启动时自动调用已配置文本模型导入 workflows/source/（默认关闭）。"""
+    try:
+        with open(_workflow_settings_path(), "r", encoding="utf-8-sig") as f:
+            return bool((json.load(f) or {}).get("auto_import_source", False))
+    except Exception:
+        return False
+
+
+def set_auto_import_source_enabled(enabled: bool) -> bool:
+    """持久化自动导入开关，使用临时文件加原子替换避免写坏。"""
+    path = _workflow_settings_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            payload = json.load(f)
+        if not isinstance(payload, dict):
+            payload = {}
+    except Exception:
+        payload = {}
+    payload["auto_import_source"] = bool(enabled)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
+    return bool(enabled)
+
+
+def seed_bundled_workflows(bundled_dir: str, target_dir: str) -> List[str]:
+    """首次启动时把随安装包提供的 workflows/ 默认包复制到用户可写目录；已存在的包不覆盖。"""
+    copied: List[str] = []
+    if not bundled_dir or not os.path.isdir(bundled_dir):
+        return copied
+    if os.path.abspath(bundled_dir) == os.path.abspath(target_dir):
+        return copied
+
+    os.makedirs(target_dir, exist_ok=True)
+    for entry in sorted(os.listdir(bundled_dir)):
+        src = os.path.join(bundled_dir, entry)
+        dst = os.path.join(target_dir, entry)
+        if os.path.exists(dst):
+            continue
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+            copied.append(entry)
+        elif os.path.isfile(src) and entry.lower().endswith((".json", ".md")):
+            shutil.copy2(src, dst)
+            copied.append(entry)
+    return copied
+
+
+async def _sync_workflows_dir_to_db_unlocked(
+    db: Any = None,
+    workflows_dir: str = WORKFLOWS_DIR,
+) -> Dict[str, Any]:
+    """sync_workflows_dir_to_db 的无锁实现。"""
     if db is None:
         from services.db_service import db_service
 
@@ -773,3 +937,336 @@ def build_export_pack(wf_record: Dict[str, Any]) -> Dict[str, Any]:
         config_json["outputs"] = outputs
 
     return {"api_json": api_json, "config_json": config_json}
+
+
+def compute_file_sha256(file_path: str) -> str:
+    """计算本地文件二进制内容的 SHA-256 摘要，用于源文件去重与变更识别。"""
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def compute_api_json_sha256(api_json: Dict[str, Any]) -> str:
+    """计算标准化 ComfyUI API JSON 内容的 SHA-256 摘要。"""
+    canonical = json.dumps(
+        api_json,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _is_link_ref(val: Any) -> bool:
+    """判断节点输入值是否为 ComfyUI 节点连线引用 [node_id, slot_index]。"""
+    return (
+        isinstance(val, list)
+        and len(val) == 2
+        and isinstance(val[0], (str, int))
+        and isinstance(val[1], int)
+    )
+
+
+def detect_api_json_issues(api_json_raw: Any) -> Dict[str, Any]:
+    """检测 ComfyUI API JSON 中缺少 class_type、断连或空媒体占位的节点问题。"""
+    api_json = (
+        json.loads(api_json_raw)
+        if isinstance(api_json_raw, str)
+        else api_json_raw
+    )
+    if not isinstance(api_json, dict) or is_comfy_ui_graph_json(api_json):
+        return {
+            "is_ui_graph": is_comfy_ui_graph_json(api_json),
+            "missing_class_type_nodes": [],
+            "broken_links": [],
+            "none_media_nodes": [],
+        }
+
+    missing_class_type_nodes: List[Dict[str, Any]] = []
+    broken_links: List[str] = []
+    none_media_nodes: List[Dict[str, Any]] = []
+
+    for node_id, node in api_json.items():
+        if not isinstance(node, dict):
+            continue
+        ct = node.get("class_type")
+        has_ct = isinstance(ct, str) and bool(ct.strip())
+        title = str((node.get("_meta") or {}).get("title") or "").strip()
+        node_inputs = node.get("inputs") if isinstance(node.get("inputs"), dict) else {}
+
+        if not has_ct:
+            missing_class_type_nodes.append(
+                {
+                    "node_id": str(node_id),
+                    "title": title,
+                    "inputs": node_inputs,
+                }
+            )
+            continue
+
+        for k, v in node_inputs.items():
+            if _is_link_ref(v):
+                ref_id = str(v[0])
+                ref_node = api_json.get(ref_id)
+                if not isinstance(ref_node, dict):
+                    broken_links.append(f"{node_id}.{k} -> 缺失节点 {ref_id}")
+                else:
+                    ref_ct = ref_node.get("class_type")
+                    if not isinstance(ref_ct, str) or not ref_ct.strip():
+                        broken_links.append(f"{node_id}.{k} -> 缺失 class_type 节点 {ref_id}")
+
+        if ct in ("LoadImage", "LoadVideo", "LoadAudio"):
+            for media_key in ("image", "file", "audio"):
+                if media_key in node_inputs:
+                    raw_val = node_inputs[media_key]
+                    if isinstance(raw_val, str) and raw_val.strip().lower() in ("", "none"):
+                        none_media_nodes.append(
+                            {
+                                "node_id": str(node_id),
+                                "class_type": ct,
+                                "input_name": media_key,
+                                "value": raw_val,
+                            }
+                        )
+
+    return {
+        "is_ui_graph": False,
+        "missing_class_type_nodes": missing_class_type_nodes,
+        "broken_links": broken_links,
+        "none_media_nodes": none_media_nodes,
+    }
+
+
+def repair_missing_primitive_nodes(
+    api_json_raw: Any,
+) -> Tuple[Dict[str, Any], List[str]]:
+    """仅对工作流副本修复导出时丢失 class_type 的 UNKNOWN 标量占位节点，不改动源文件。"""
+    api_json = (
+        json.loads(api_json_raw)
+        if isinstance(api_json_raw, str)
+        else copy.deepcopy(api_json_raw)
+    )
+    if not isinstance(api_json, dict):
+        return {}, []
+
+    notes: List[str] = []
+    # 仅统计有效上游节点对其他节点的连线，忽略无效节点自身引用
+    downstream_refs: Dict[str, List[Tuple[str, str]]] = {}
+    for dst_id, dst_node in api_json.items():
+        if not isinstance(dst_node, dict):
+            continue
+        dst_ct = dst_node.get("class_type")
+        if not isinstance(dst_ct, str) or not dst_ct.strip():
+            continue
+        dst_inputs = dst_node.get("inputs") if isinstance(dst_node.get("inputs"), dict) else {}
+        for dst_key, val in dst_inputs.items():
+            if _is_link_ref(val):
+                downstream_refs.setdefault(str(val[0]), []).append(
+                    (str(dst_id), str(dst_key))
+                )
+
+    for node_id in list(api_json.keys()):
+        node = api_json.get(node_id)
+        if not isinstance(node, dict):
+            continue
+        ct = node.get("class_type")
+        if isinstance(ct, str) and ct.strip():
+            continue
+
+        refs = downstream_refs.get(str(node_id), [])
+        node_inputs = node.get("inputs") if isinstance(node.get("inputs"), dict) else {}
+        title = str((node.get("_meta") or {}).get("title") or "").strip()
+
+        if not refs:
+            api_json.pop(node_id, None)
+            notes.append(f"移除无下游引用的失效节点 {node_id}" + (f"（{title}）" if title else ""))
+            continue
+
+        if "UNKNOWN" not in node_inputs:
+            continue
+
+        val = node_inputs["UNKNOWN"]
+        if (
+            isinstance(val, int)
+            and not isinstance(val, bool)
+            and all(
+                str((api_json.get(dst_id) or {}).get("class_type") or "") == "RandomNoise"
+                and dst_key == "noise_seed"
+                for dst_id, dst_key in refs
+            )
+        ):
+            for dst_id, dst_key in refs:
+                api_json[dst_id]["inputs"][dst_key] = val
+            api_json.pop(node_id, None)
+            notes.append(f"将失效种子节点 {node_id} 内联写回 RandomNoise.noise_seed 并清理")
+            continue
+
+        if isinstance(val, bool):
+            primitive_cls = "PrimitiveBoolean"
+        elif isinstance(val, int):
+            primitive_cls = "PrimitiveInt"
+        elif isinstance(val, float):
+            primitive_cls = "PrimitiveFloat"
+        elif isinstance(val, str):
+            primitive_cls = "PrimitiveStringMultiline"
+        else:
+            continue
+
+        api_json[node_id] = {
+            "inputs": {"value": val},
+            "class_type": primitive_cls,
+            "_meta": {
+                "title": title or f"Repaired Primitive ({node_id})",
+                "cnr_id": "comfy-core",
+            },
+        }
+        notes.append(
+            f"将缺失 class_type 的节点 {node_id}"
+            + (f"（{title}）" if title else "")
+            + f" 修复为 {primitive_cls}"
+        )
+
+    return api_json, notes
+
+
+def scan_source_workflows_dir(
+    source_dir: str = SOURCE_WORKFLOWS_DIR,
+    workflows_dir: str = WORKFLOWS_DIR,
+) -> Dict[str, Any]:
+    """扫描 workflows/source/ 下的原始 API JSON，识别新增、已导入、已更新和无效文件。"""
+    result: Dict[str, Any] = {
+        "source_dir": source_dir,
+        "new": [],
+        "updated": [],
+        "already_imported": [],
+        "invalid": [],
+    }
+    if not os.path.isdir(source_dir):
+        return result
+
+    existing_packs = scan_workflows_dir(workflows_dir).get("valid", [])
+    known_source_hashes: set[str] = set()
+    known_api_hashes: Dict[str, str] = {}
+    known_by_source_file: Dict[str, Dict[str, str]] = {}
+
+    for pack in existing_packs:
+        cfg = pack.get("config_json") or {}
+        wf_name = str(cfg.get("name") or "")
+        src_file = str(cfg.get("source_file") or "").strip()
+        src_sha = str(cfg.get("source_sha256") or "").strip()
+        api_sha = compute_api_json_sha256(pack.get("api_json") or {})
+        if src_sha:
+            known_source_hashes.add(src_sha)
+        if wf_name:
+            known_api_hashes[api_sha] = wf_name
+        if src_file:
+            known_by_source_file[src_file] = {
+                "workflow_name": wf_name,
+                "source_sha256": src_sha,
+            }
+
+    for entry in sorted(os.listdir(source_dir)):
+        if entry.startswith(".") or not entry.lower().endswith(".json"):
+            continue
+        full_path = os.path.join(source_dir, entry)
+        if not os.path.isfile(full_path):
+            continue
+
+        file_sha = compute_file_sha256(full_path)
+        try:
+            with open(full_path, "r", encoding="utf-8-sig") as f:
+                raw_payload = json.load(f)
+        except Exception as exc:
+            result["invalid"].append(
+                {
+                    "filename": entry,
+                    "path": full_path,
+                    "source_sha256": file_sha,
+                    "reason": f"JSON 解析失败: {exc}",
+                }
+            )
+            continue
+
+        if is_comfy_ui_graph_json(raw_payload):
+            result["invalid"].append(
+                {
+                    "filename": entry,
+                    "path": full_path,
+                    "source_sha256": file_sha,
+                    "reason": "检测到 ComfyUI 编辑器画布 JSON（含 nodes/links），请用 Dev Mode -> Export (API) 重新导出",
+                }
+            )
+            continue
+
+        if not isinstance(raw_payload, dict) or not raw_payload:
+            result["invalid"].append(
+                {
+                    "filename": entry,
+                    "path": full_path,
+                    "source_sha256": file_sha,
+                    "reason": "API JSON 必须为非空节点字典对象",
+                }
+            )
+            continue
+
+        api_sha = compute_api_json_sha256(raw_payload)
+        if file_sha in known_source_hashes or api_sha in known_api_hashes:
+            matched_name = (
+                known_by_source_file.get(entry, {}).get("workflow_name")
+                or known_api_hashes.get(api_sha, "")
+            )
+            result["already_imported"].append(
+                {
+                    "filename": entry,
+                    "path": full_path,
+                    "source_sha256": file_sha,
+                    "workflow_name": matched_name,
+                }
+            )
+            continue
+
+        validation_errors = validate_api_json(raw_payload)
+        repair_notes: List[str] = []
+        if validation_errors:
+            repaired_api, repair_notes = repair_missing_primitive_nodes(raw_payload)
+            repaired_errors = validate_api_json(repaired_api)
+            if repaired_errors:
+                result["invalid"].append(
+                    {
+                        "filename": entry,
+                        "path": full_path,
+                        "source_sha256": file_sha,
+                        "reason": "；".join(repaired_errors),
+                    }
+                )
+                continue
+            repaired_sha = compute_api_json_sha256(repaired_api)
+            if repaired_sha in known_api_hashes:
+                result["already_imported"].append(
+                    {
+                        "filename": entry,
+                        "path": full_path,
+                        "source_sha256": file_sha,
+                        "workflow_name": known_api_hashes[repaired_sha],
+                    }
+                )
+                continue
+
+        item = {
+            "filename": entry,
+            "path": full_path,
+            "source_sha256": file_sha,
+            "repair_notes": repair_notes,
+        }
+        if entry in known_by_source_file:
+            item["previous_workflow_name"] = known_by_source_file[entry]["workflow_name"]
+            result["updated"].append(item)
+        else:
+            result["new"].append(item)
+
+    return result

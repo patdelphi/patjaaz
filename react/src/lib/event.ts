@@ -37,6 +37,7 @@ export type TEvents = {
 
   // ********** Canvas events - Start **********
   'Canvas::AddImagesToChat': TCanvasAddImagesToChatEvent
+  'Canvas::AddTextToChat': string[]
   'Canvas::SyncGeneratedImages': { canvasId: string }
   // ********** Canvas events - End **********
 

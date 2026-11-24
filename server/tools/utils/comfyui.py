@@ -170,6 +170,28 @@ class ComfyUIGenerator:
         return mime_type, width, height, filename
 
 
+async def download_outputs(
+    urls: list[str], headers: Optional[dict[str, str]] = None
+) -> list[tuple[str, int, int, str]]:
+    """把 ComfyUI 输出 URL 逐个下载保存到 FILES_DIR，返回 (mime, width, height, filename) 列表。"""
+    results: list[tuple[str, int, int, str]] = []
+    for url in urls:
+        image_id = generate_image_id()
+        file_type = await detect_file_type_comprehensive(url, headers=headers)
+        if file_type == "video":
+            get_info_func = get_video_info_and_save
+        elif file_type == "audio":
+            get_info_func = get_audio_info_and_save
+        else:
+            get_info_func = get_image_info_and_save
+
+        mime_type, width, height, extension = await get_info_func(
+            url, os.path.join(FILES_DIR, f"{image_id}"), headers=headers
+        )
+        results.append((mime_type, width, height, f"{image_id}.{extension}"))
+    return results
+
+
 class ComfyUIWorkflowRunner:
     """通用动态 ComfyUI 工作流运行器，支持多实例鉴权头与图片、视频、音频输出落盘。"""
 
@@ -178,13 +200,14 @@ class ComfyUIWorkflowRunner:
         workflow_dict: dict,
         base_url: str,
         headers: Optional[dict[str, str]] = None,
-        timeout: float = 300,
+        timeout: Optional[float] = None,
         instance_id: Optional[str] = None,
     ):
         self.workflow = workflow_dict
         self.base_url = base_url
         self.headers = dict(headers or {})
-        self.timeout = float(timeout) if timeout and timeout > 0 else 300.0
+        # 为空表示不限时，适配耗时很长的视频生成
+        self.timeout = float(timeout) if timeout and timeout > 0 else None
         self.instance_id = instance_id
 
     async def generate(

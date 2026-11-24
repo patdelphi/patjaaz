@@ -12,7 +12,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 print('Importing websocket_router')
 from routers.websocket_router import *  # DO NOT DELETE THIS LINE, OTHERWISE, WEBSOCKET WILL NOT WORK
 print('Importing routers')
-from routers import auth as auth_router, comfyui_router, config_router, image_router, root_router, workspace, canvas, ssl_test, chat_router, settings, tool_confirmation
+from routers import auth as auth_router, comfyui_router, config_router, image_router, root_router, workspace, canvas, chat_router, settings, tool_confirmation
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,7 +29,19 @@ from services.config_service import config_service
 print('Importing tool_service')
 from services.tool_service import tool_service
 from services.auth_service import SESSION_COOKIE_NAME, auth_service
-from services.comfy_workflow_pack import sync_workflows_dir_to_db
+from services.db_service import db_service
+from services.job_recovery import recover_jobs
+from services.comfy_workflow_ai_importer import (
+    auto_import_new_source_workflows,
+    select_available_text_model,
+)
+from services.comfy_workflow_pack import (
+    WORKFLOWS_DIR,
+    get_auto_import_source_enabled,
+    scan_source_workflows_dir,
+    seed_bundled_workflows,
+    sync_workflows_dir_to_db,
+)
 
 BASE_CSP_POLICY = (
     "default-src 'self'; "
@@ -75,21 +87,96 @@ async def initialize():
 root_dir = os.path.dirname(__file__)
 
 
+async def _background_import_source_workflows() -> None:
+    """后台增量导入 workflows/source/ 中新增或变更的原始工作流文件并刷新工具列表。"""
+    try:
+        res = await auto_import_new_source_workflows()
+        if res.get("imported"):
+            await tool_service.initialize()
+            print(
+                f"Auto-imported {len(res['imported'])} workflow(s) from workflows/source/"
+            )
+    except Exception as exc:
+        print(f"Warning auto-importing workflows/source/: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # onstartup
     auth_service.require_configured()
     await initialize()
+
+    # 上次崩溃或重启遗留的运行中任务不会再有人收尾，启动时统一标为 interrupted
+    try:
+        stale = await db_service.interrupt_stale_jobs()
+        if stale:
+            print(f"Marked {stale} stale job(s) as interrupted")
+    except Exception as job_exc:
+        print(f"Warning reconciling stale jobs: {job_exc}")
+
+    # 重启前仍在 ComfyUI 上执行、已记录 prompt_id 的任务：后台接管并把产出写回原画布
+    recovery_task = None
+    try:
+        recoverable = await db_service.list_recoverable_jobs()
+        if recoverable:
+            print(f"Recovering {len(recoverable)} running job(s) from ComfyUI history")
+            recovery_task = asyncio.create_task(recover_jobs(recoverable))
+    except Exception as rec_exc:
+        print(f"Warning starting job recovery: {rec_exc}")
+
+    # 打包运行时：首次启动把随包默认工作流复制到用户可写目录（已存在的不覆盖）
+    bundled_dir = os.getenv("JAAZ_BUNDLED_WORKFLOWS_DIR", "").strip()
+    if bundled_dir:
+        try:
+            copied = seed_bundled_workflows(bundled_dir, WORKFLOWS_DIR)
+            if copied:
+                print(f"Seeded {len(copied)} bundled workflow item(s) into {WORKFLOWS_DIR}")
+        except Exception as seed_exc:
+            print(f"Warning seeding bundled workflows: {seed_exc}")
+
     try:
         await sync_workflows_dir_to_db()
     except Exception as sync_exc:
         print(f"Warning syncing workflows/ directory on startup: {sync_exc}")
     await tool_service.initialize()
+
+    # 仅提示待导入文件；只有用户在设置中手动打开“自动导入”开关才会调用文本模型
+    source_import_task = None
+    try:
+        src_scan = scan_source_workflows_dir()
+        pending_cnt = len(src_scan.get("new", [])) + len(src_scan.get("updated", []))
+        if pending_cnt > 0:
+            print(
+                f"Detected {pending_cnt} pending workflow file(s) in workflows/source/"
+            )
+            if get_auto_import_source_enabled():
+                try:
+                    select_available_text_model()
+                    source_import_task = asyncio.create_task(
+                        _background_import_source_workflows()
+                    )
+                except RuntimeError as llm_exc:
+                    print(
+                        f"Skipping automatic AI import on startup (workflows/source/): {llm_exc}"
+                    )
+            else:
+                print("Auto import of workflows/source/ is disabled (enable it in Settings -> ComfyUI)")
+    except Exception as scan_exc:
+        print(f"Warning scanning workflows/source/ on startup: {scan_exc}")
+
     reaper_task = asyncio.create_task(_expired_socket_reaper())
     try:
         yield
     finally:
         # onshutdown
+        if recovery_task is not None:
+            recovery_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await recovery_task
+        if source_import_task is not None:
+            source_import_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await source_import_task
         reaper_task.cancel()
         with suppress(asyncio.CancelledError):
             await reaper_task
@@ -126,7 +213,10 @@ app.include_router(root_router.router)
 app.include_router(canvas.router)
 app.include_router(workspace.router)
 app.include_router(image_router.router)
-app.include_router(ssl_test.router)
+if os.getenv("JAAZ_DEBUG", "").strip() == "1":
+    # SSL 诊断路由仅在调试模式注册，生产默认不暴露
+    from routers import ssl_test
+    app.include_router(ssl_test.router)
 app.include_router(chat_router.router)
 app.include_router(tool_confirmation.router)
 

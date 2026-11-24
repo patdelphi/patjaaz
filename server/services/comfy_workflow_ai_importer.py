@@ -1,7 +1,9 @@
 """程序说明：由内置 AI Agent（已配置 LLM + ComfyUI object_info）直接解析 API JSON、生成并自纠 jaaz.workflow.json 配置。"""
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -10,8 +12,16 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from services.comfy_instance_service import build_comfy_http_url, comfy_instance_service
 from services.comfy_workflow_pack import (
+    SOURCE_WORKFLOWS_DIR,
+    WORKFLOWS_DIR,
     WorkflowPackValidationError,
+    generate_draft_config,
+    repair_missing_primitive_nodes,
+    save_pack_to_workflows_dir,
+    scan_source_workflows_dir,
     summarize_api_json_for_agent,
+    sync_workflows_dir_to_db,
+    unique_pack_name,
     validate_api_json,
     validate_workflow_pack,
 )
@@ -20,6 +30,7 @@ from services.llm_adapters import create_chat_model
 from utils.http_client import HttpClient
 
 _CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
+_IMPORT_LOCK = asyncio.Lock()
 
 _AI_IMPORTER_SYSTEM_PROMPT = """你是 ComfyUI 与 Jaaz 工作流配置专家。
 你的唯一任务：根据提供的 ComfyUI API JSON 节点摘要（含可选的 /object_info 枚举项）以及用户补充说明，生成一份严格符合 Jaaz Schema v1 的 JSON 配置对象，使对话 Agent 能够准确调用该工作流。
@@ -285,4 +296,130 @@ async def generate_workflow_config_with_ai(
         "model_used": model_used,
         "repaired": repaired,
         "used_object_info": bool(resolved_object_info),
+    }
+
+
+async def auto_import_new_source_workflows(**kwargs: Any) -> Dict[str, Any]:
+    """自动检测 workflows/source/ 中未导入或更新的原始工作流并导入（进程内串行，避免并发写同一目录）。"""
+    async with _IMPORT_LOCK:
+        return await _auto_import_new_source_workflows_unlocked(**kwargs)
+
+
+async def _auto_import_new_source_workflows_unlocked(
+    *,
+    source_dir: str = SOURCE_WORKFLOWS_DIR,
+    workflows_dir: str = WORKFLOWS_DIR,
+    db: Any = None,
+    instance_id: Optional[str] = None,
+    provider: str = "",
+    model: str = "",
+    chat_model: Any = None,
+    object_info: Optional[Dict[str, Any]] = None,
+    fallback_to_draft: bool = False,
+) -> Dict[str, Any]:
+    """自动检测 workflows/source/ 中未导入或更新的原始工作流，调用 AI 补全配置并写入 workflows/ 与数据库。"""
+    scan = scan_source_workflows_dir(source_dir=source_dir, workflows_dir=workflows_dir)
+    pending = list(scan.get("new", [])) + list(scan.get("updated", []))
+
+    imported: List[Dict[str, Any]] = []
+    skipped_no_llm: List[str] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not pending:
+        return {
+            "source_dir": scan["source_dir"],
+            "imported": imported,
+            "skipped_no_llm": skipped_no_llm,
+            "already_imported": scan.get("already_imported", []),
+            "invalid": scan.get("invalid", []),
+            "errors": errors,
+        }
+
+    resolved_object_info = (
+        object_info
+        if object_info is not None
+        else await fetch_comfy_object_info(instance_id)
+    )
+
+    llm_available = True
+    if chat_model is None:
+        try:
+            select_available_text_model(preferred_provider=provider, preferred_model=model)
+        except RuntimeError:
+            llm_available = False
+
+    for item in pending:
+        filename = str(item.get("filename") or "")
+        file_path = str(item.get("path") or "")
+        source_sha256 = str(item.get("source_sha256") or "")
+        stem = os.path.splitext(filename)[0]
+
+        if not llm_available and not fallback_to_draft:
+            skipped_no_llm.append(filename)
+            continue
+
+        try:
+            with open(file_path, "r", encoding="utf-8-sig") as f:
+                raw_api = json.load(f)
+
+            repaired_api, repair_notes = repair_missing_primitive_nodes(raw_api)
+            hint_parts = [f"原始文件名: {filename}"]
+            if repair_notes:
+                hint_parts.append("自动修复说明: " + "；".join(repair_notes))
+            user_hint = "\n".join(hint_parts)
+
+            if llm_available:
+                ai_res = await generate_workflow_config_with_ai(
+                    repaired_api,
+                    suggested_name=stem,
+                    user_hint=user_hint,
+                    instance_id=instance_id,
+                    provider=provider,
+                    model=model,
+                    chat_model=chat_model,
+                    object_info=resolved_object_info,
+                )
+                cfg = dict(ai_res["config_json"])
+                mode = "ai"
+            else:
+                # 无文本模型时仅生成关闭状态草稿，避免误将未精校工作流暴露给对话 Agent
+                cfg = generate_draft_config(repaired_api, suggested_name=stem)
+                cfg["enabled"] = False
+                cfg["description"] = (
+                    f"{cfg['description']}（来自 {filename} 的自动草稿，请补充完善参数说明后再启用）"
+                )
+                mode = "draft"
+
+            cfg["source_file"] = filename
+            cfg["source_sha256"] = source_sha256
+            # 不同来源文件落到同名目录时自动加后缀，避免覆盖已有工作流
+            cfg["name"] = unique_pack_name(str(cfg["name"]), filename, workflows_dir)
+            saved = save_pack_to_workflows_dir(
+                repaired_api, cfg, workflows_dir=workflows_dir
+            )
+            imported.append(
+                {
+                    "filename": filename,
+                    "name": saved["config_json"]["name"],
+                    "capability": saved["config_json"]["capability"],
+                    "output_kind": saved["config_json"]["output_kind"],
+                    "enabled": saved["config_json"]["enabled"],
+                    "mode": mode,
+                    "repair_notes": repair_notes,
+                    "source_path": saved["source_path"],
+                }
+            )
+        except Exception as exc:
+            errors.append({"filename": filename, "error": str(exc)})
+
+    if imported:
+        await sync_workflows_dir_to_db(db=db, workflows_dir=workflows_dir)
+
+    return {
+        "source_dir": scan["source_dir"],
+        "imported": imported,
+        "skipped_no_llm": skipped_no_llm,
+        "already_imported": scan.get("already_imported", []),
+        "invalid": scan.get("invalid", []),
+        "errors": errors,
     }

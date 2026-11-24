@@ -78,7 +78,7 @@ async def execute(
     wait: bool = True,
     verbose: bool = False,
     local_paths: bool = False,
-    timeout: float = 300,
+    timeout: Optional[float] = None,
     ctx: Optional[Dict[str, Any]] = None,
     headers: Optional[Dict[str, str]] = None,
     instance_id: Optional[str] = None,
@@ -115,6 +115,17 @@ async def execute(
         if wait:
             await execution.connect()
         await execution.queue()
+        # 把远端 prompt_id 写入任务记录，服务重启后可据此从 /history 找回产出
+        job_id = ctx.get("job_id")
+        if job_id and execution.prompt_id:
+            try:
+                from services.db_service import db_service
+
+                await db_service.update_job_status(
+                    job_id, remote_prompt_id=str(execution.prompt_id)
+                )
+            except Exception as exc:
+                print(f"[comfyui_execution] Warning saving remote_prompt_id: {exc}")
         if session_id and execution.prompt_id:
             comfy_instance_service.register_active_prompt(
                 session_id,
@@ -189,7 +200,7 @@ class WorkflowExecution:
         verbose: bool,
         progress: Optional[ExecutionProgress],
         local_paths: bool,
-        timeout: float = 300,
+        timeout: Optional[float] = None,
         ctx: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         instance_id: Optional[str] = None,
@@ -214,7 +225,8 @@ class WorkflowExecution:
         self.prompt_id = None
         self.ws = None
         self.ws_core = "ws://"
-        self.timeout = float(timeout) if timeout and timeout > 0 else 300.0
+        # timeout 为空或 <=0 表示不限时：视频等长任务由 ComfyUI 自己结束，断线时降级轮询 /history
+        self.timeout: Optional[float] = float(timeout) if timeout and timeout > 0 else None
         self.ctx = ctx if ctx is not None else {}
         self.headers = dict(headers or {})
         self.instance_id = instance_id
@@ -298,8 +310,11 @@ class WorkflowExecution:
 
     async def watch_execution(self):
         """监听工作流执行直到完成；带总超时与单帧等待超时，断线自动降级轮询历史。"""
-        deadline = time.monotonic() + self.timeout
-        ws_idle_timeout = min(30.0, self.timeout)
+        # 不限时（timeout 为空）时 deadline 为无穷大，只受 ComfyUI 实际结束或取消控制
+        deadline = (
+            time.monotonic() + self.timeout if self.timeout is not None else float("inf")
+        )
+        ws_idle_timeout = min(30.0, self.timeout) if self.timeout is not None else 30.0
 
         try:
             if self.ws is None:

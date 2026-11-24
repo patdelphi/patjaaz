@@ -1,0 +1,250 @@
+{
+  "1": {
+    "inputs": {
+      "model_root": "MiniMax-H3",
+      "dtype": "auto",
+      "text_encoder_path": "qwen3-vl-32b-int8_convrot.safetensors"
+    },
+    "class_type": "RHMiniMaxH3Ref2VATextEncoderLoader",
+    "_meta": {
+      "title": "Ref2VA Qwen3-VL Loader",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "2": {
+    "inputs": {
+      "model_root": "MiniMax-H3",
+      "dtype": "auto",
+      "transformer_path": "MiniMax-H3-Ref2VA-int8_convrot.safetensors",
+      "attention_backend": "auto"
+    },
+    "class_type": "RHMiniMaxH3Ref2VAModelLoader",
+    "_meta": {
+      "title": "Ref2VA DiT Loader",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "3": {
+    "inputs": {
+      "model_root": "MiniMax-H3",
+      "video_vae_path": "MiniMax-H3-video_vae.safetensors",
+      "audio_vae_path": "MiniMax-H3-audio_vae.safetensors"
+    },
+    "class_type": "RHMiniMaxH3Ref2VAVAELoader",
+    "_meta": {
+      "title": "Ref2VA Dual VAE Loader",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "4": {
+    "inputs": {
+      "image": "156b5b5b4de3b234ad3882d719628c1f4db1c49e366ebb756d3b0a09b0f81178.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "5": {
+    "inputs": {
+      "image": "d7b9556dd14b900f27ed038b390eb53a653e8a19bcf405f2fc60b6886a953677.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "8": {
+    "inputs": {
+      "image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3Ref2VAImageReference",
+    "_meta": {
+      "title": "Image Reference",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "9": {
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "references": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3Ref2VAImageReference",
+    "_meta": {
+      "title": "Image Reference",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "10": {
+    "inputs": {
+      "aspect_ratio": "9:16",
+      "duration_seconds": 8,
+      "width": 736,
+      "height": 1024,
+      "references": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3Ref2VATarget",
+    "_meta": {
+      "title": "RunningHub MiniMax H3 Ref2VA Target (Legacy)",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "11": {
+    "inputs": {
+      "prompt": "🎬 分镜一（0-2秒）\n\n###《启程》\n\n画面描述：\n\n傍晚城市高架公路，天空呈现橙蓝渐变晚霞，一位年轻东方美女骑着黑色运动摩托车高速驶来。她身穿黑色修身皮衣皮裤，黑色骑行手套，长发随风飘扬，神情冷静坚定。\n\n人物动作：\n\n双手稳握车把，身体微微前倾，保持稳定骑行姿势，目视前方。\n\n镜头运动：\n\n无人车前方跟拍，镜头缓慢向后拉，保持正面追踪。\n\n电影感、公路速度感、真实风压效果。\n\n🎬 分镜二（2-4秒）\n\n###《极速》\n\n画面描述：\n\n镜头推进到半身近景，人物保持高速骑行，夕阳映照脸部轮廓，黑色摩托车灯持续点亮，背景道路形成自然速度虚化。\n\n人物动作：\n\n眼神坚定注视前方，头发随风自然飞扬，轻轻压低身体提高速度。\n\n镜头运动：\n\n镜头缓慢推进至人物特写。\n\n突出：\n\n面部细节\n摩托车质感\n风吹头发效果\n公路速度感\n🎬 分镜三（4-6秒）\n\n###《转弯》\n\n画面描述：\n\n来到城市高架弯道，晚霞更加浓郁，人物驾驶摩托自然进入弯道。\n\n人物动作：\n\n身体轻微压弯，头部微微转向前方道路，双腿自然夹紧车身。\n\n风吹动长发与皮衣。\n\n镜头运动：\n\n侧前45°环绕跟拍。\n\n镜头略微下降。\n\n加入：\n\n轻微动态模糊\n\n真实惯性\n\n电影镜头语言\n\n🎬 分镜四（6-8秒）\n\n###《停驻》\n\n画面描述：\n\n摩托缓缓停靠在桥边观景平台。\n\n城市夜景开始亮起灯光。\n\n夕阳即将落下。\n\n人物坐在摩托车上。\n\n人物动作：\n\n右手摘下头盔放在腿边（如果没有头盔则自然扶车）\n\n左手轻轻整理被风吹乱的长发。\n\n抬头望向远方城市天际线。\n\n嘴角露出淡淡微笑。\n\n镜头运动：\n\n镜头缓慢拉远。\n\n最后升高一点。\n\n形成电影结尾。",
+      "ref_image_size": "match",
+      "h3_text_encoder": [
+        "1",
+        0
+      ],
+      "h3_vae_bundle": [
+        "3",
+        0
+      ],
+      "target": [
+        "10",
+        0
+      ],
+      "references": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3Ref2VAEncode",
+    "_meta": {
+      "title": "RunningHub MiniMax H3 Ref2VA Encode (Legacy)",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "12": {
+    "inputs": {
+      "target": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3EmptyAVLatent",
+    "_meta": {
+      "title": "Empty AV Latent",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "13": {
+    "inputs": {
+      "seed": 718950812003780,
+      "sigma_points": 50,
+      "video_shift": 12.000000000000002,
+      "audio_shift": 3.0000000000000004,
+      "accel": "manual-velocity",
+      "denoise_video": true,
+      "cache_dit_rdt": 0.12000000000000002,
+      "cache_dit_mc": 2,
+      "cache_dit_warmup": 4,
+      "velocity_stride": 4,
+      "sampler_mode": "euler",
+      "allow_accel_with_res_multistep": false,
+      "h3_model": [
+        "2",
+        0
+      ],
+      "conditioning": [
+        "11",
+        0
+      ],
+      "av_latent": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3DualSigmaSampler",
+    "_meta": {
+      "title": "Dual Sigma Sampler",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "14": {
+    "inputs": {
+      "h3_vae_bundle": [
+        "3",
+        0
+      ],
+      "sampled_av_latent": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "RHMiniMaxH3DecodeAV",
+    "_meta": {
+      "title": "Decode Video + Audio",
+      "aux_id": "RH-RunningHub/ComfyUI-RH-MiniMax-H3",
+      "ver": "f58a52fc6e4ec932e61ec6388c0b1858d3b35174"
+    }
+  },
+  "15": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "chroma_subsampling": "auto",
+      "codec": "none",
+      "images": [
+        "14",
+        0
+      ],
+      "audio": [
+        "14",
+        1
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "16": {
+    "inputs": {
+      "filename_prefix": "minimax_h3/ref2va_image",
+      "format": "mp4",
+      "format.codec": "h264",
+      "format.codec.encoding": "auto",
+      "codec": "auto",
+      "video": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  }
+}

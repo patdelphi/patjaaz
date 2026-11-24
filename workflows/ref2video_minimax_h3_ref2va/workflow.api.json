@@ -1,0 +1,413 @@
+{
+  "92": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "video": [
+        "130",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "115": {
+    "inputs": {
+      "aspect_ratio": "16:9 (Widescreen)",
+      "megapixels": 0.98,
+      "multiple": 32
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "Resolution Selector (Size)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "119": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "120": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "121": {
+    "inputs": {
+      "samples": [
+        "125",
+        0
+      ],
+      "vae": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码（音频）",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "122": {
+    "inputs": {
+      "samples": [
+        "125",
+        0
+      ],
+      "vae": [
+        "119",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "123": {
+    "inputs": {
+      "sampler_name": "res_multistep"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "124": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": [
+        "142",
+        0
+      ],
+      "denoise": 1,
+      "model": [
+        "127",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "125": {
+    "inputs": {
+      "noise": [
+        "129",
+        0
+      ],
+      "guider": [
+        "126",
+        0
+      ],
+      "sampler": [
+        "123",
+        0
+      ],
+      "sigmas": [
+        "124",
+        0
+      ],
+      "latent_image": [
+        "136",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "126": {
+    "inputs": {
+      "model": [
+        "141",
+        0
+      ],
+      "conditioning": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "127": {
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "128": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "129": {
+    "inputs": {
+      "noise_seed": 880176533267188
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "130": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": "auto",
+      "color_space": "sRGB",
+      "chroma_subsampling": "auto",
+      "codec": "none",
+      "images": [
+        "122",
+        0
+      ],
+      "audio": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "131": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "132",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "数学表达式",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "132": {
+    "inputs": {
+      "value": 10
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (Duration)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "136": {
+    "inputs": {
+      "prompt": [
+        "138",
+        0
+      ],
+      "width": [
+        "115",
+        0
+      ],
+      "height": [
+        "115",
+        1
+      ],
+      "length": [
+        "131",
+        1
+      ],
+      "ref_image_size": "match",
+      "clip": [
+        "128",
+        0
+      ],
+      "vae": [
+        "119",
+        0
+      ],
+      "audio_vae": [
+        "120",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "164",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "_meta": {
+      "title": "MiniMax H3 参考转视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "138": {
+    "inputs": {
+      "value": "分镜提示词\n\n出场角色，请看参考图：左边人物为小蓝，身高约 100 厘米，右边人物为小黄，身高约 80 厘米。\n\n背景场景：场景光影：室外，白天，强烈的顶光，面部阴影深刻，压抑绝望\n\n参考图使用规则：\n- 角色参考图：只参考此图中的角色形象；不参考角度、构图、姿势、表情；若此参考图是角色多视图，则必须确保角色不能重复出现（除非明确要求角色分身）。\n- 场景参考图：只参考此图中的场景位置、大小、形状、结构关系；不参考角度、构图、多角色站位；氛围、色调、光影、元素风格等根据剧情内容来酌情参考；若此参考图是场景多视图或全景多视图，则必须确保场景的空间结构合理，且符合客观逻辑，不允许出现镜像或复制等视觉效果。\n- 道具参考图：只参考此图中的道具大小、形状、结构；不参考角度、构图、位置；若此参考图是道具多视图，则必须确保与角色/场景的关联是符合客观逻辑的，特别是书/信/手机/显示器/电脑/门窗/贴纸/壁画等所有具有正反面或多角度差异的道具或物品，需要符合正反面逻辑，尽量从多视图中提取正面或反面或角度图来适配客观逻辑。\n\n---\n\n时间段：0-4 秒。停下脚步，疯狂摇晃。\n画面：在沙丘中，小蓝突然停下脚步，双手抓住脖子上的水壶，疯狂地上下摇晃，试图倒出水来，但一滴水也没倒出来。的表情充满焦躁和绝望。\n禁止：禁止中倒出水；禁止变形或消失；禁止的动作显得轻松；禁止离开画面。\n约束：摇晃的动作需剧烈，表现出极度的渴望；需保持原有的形状和颜色；的面部表情需表现出绝望和干渴。\n站位与朝向：站在画面中央，在画面边缘侧后方，面向，面向。\n运镜：缓慢推进，聚焦疯狂摇晃的动作和绝望的表情。\n音效：疯狂摇晃空的塑料碰撞声，急促的喘息声。\n\n时间段：4-7 秒。向大喊。\n画面：小蓝停止摇晃水壶，转头看向小黄，表情绝望，张大嘴巴大喊：“水！我要水！早就空了！”。站在原地，静静地看着，表情显得有些无奈。\n禁止：禁止的面部表情不符合绝望的情绪；禁止表现出夸张的反应；禁止口型与对白不匹配。\n约束：大喊时，嘴巴张大，表情极度痛苦；必须说出对白；保持相对冷静的状态。\n站位与朝向：转向，两人面对面。\n运镜：镜头固定在的脸部，捕捉他的表情和喊叫动作。\n音效：急促的喘息声，大喊的声音。\n\n时间段：7-10 秒。情绪崩溃，静静注视。\n画面：小蓝大喊完后，身体微微前倾，显得更加虚弱和崩溃。双手无力地垂在胸前。小黄依然站在原地，眼神平静地注视着，似乎在思考如何安抚他。\n禁止：禁止突然恢复体力；禁止场景光线发生突变；禁止的位置发生跳变。\n约束：的姿态需表现出极度的疲惫和无力；的眼神需保持平静；随的身体动作自然下垂。\n站位与朝向：两人保持面对面的站位。\n运镜：缓慢拉远，展现两人在强光下的对比。\n音效：急促的喘息声逐渐减弱，风声渐起。\n\n---\n\n输出约束：\n1.的面部表情必须表现出绝望和干渴，动作需剧烈。\n2.必须是圆润小巧的卡通造型，军绿色，挂在的脖子上。\n3.必须穿着宽松的长袖防晒长袍，带有挡风沙的头巾帽。\n4.必须讲出对白：“水！我要水！早就空了！”。\n5.场景必须保持极度炎热干燥、面部阴影深刻的氛围。\n6. 画面必须保持“广袤·皮克斯3D卡通渲染·三维”的视觉风格。\n\n[视觉风格：广袤·皮克斯3D卡通渲染·三维，暖黄炽热主色调，强烈日照与硬阴影，电影级高清3D材质质感。]"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Input Text (Prompt)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "141": {
+    "inputs": {
+      "switch": [
+        "146",
+        0
+      ],
+      "on_false": [
+        "127",
+        0
+      ],
+      "on_true": [
+        "145",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (model)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "142": {
+    "inputs": {
+      "switch": [
+        "146",
+        0
+      ],
+      "on_false": [
+        "143",
+        0
+      ],
+      "on_true": [
+        "144",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (Steps)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "143": {
+    "inputs": {
+      "value": 20
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Full)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "144": {
+    "inputs": {
+      "value": 4
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Lightning LoRA)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "145": {
+    "inputs": {
+      "lora_name": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "127",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "146": {
+    "inputs": {
+      "value": true
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Boolean (Enable Lightning LoRA)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "164": {
+    "inputs": {
+      "image": "小人.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  }
+}

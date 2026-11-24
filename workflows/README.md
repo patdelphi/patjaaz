@@ -14,6 +14,12 @@
   workflows/<workflow_name>.api.json
   workflows/<workflow_name>.jaaz.json
   ```
+- **原始 API 工作流收件箱（`workflows/source/`）：**
+  可将尚未配对 `jaaz.workflow.json` 的 ComfyUI **Export (API)** 原始 JSON 直接放入 `workflows/source/`（该目录会被工作流包扫描自动跳过，不会报错）：
+  - 服务启动与设置页列表加载会自动检测 `workflows/source/` 中新增或变更的文件；
+  - 默认只提示、不自动调用模型；需要在「设置 -> ComfyUI」手动打开“启动时自动导入”开关，或点击「AI 自动导入新文件」按钮，才会用已配置文本大模型生成配对配置并入库（会消耗 token）；
+  - 打包后工作流目录位于用户数据目录 `workflows/`（可用环境变量 `JAAZ_WORKFLOWS_DIR` 指定），首次启动会把随包默认工作流复制过去，已有的不覆盖；
+  - 也可由外部 AI Agent 执行 `server\.venv\Scripts\python.exe server\scripts\workflow_cli.py check-source` 逐一完成高精度的参数与说明补全后写入 `workflows/<name>/`。
 
 > 注意：`workflow.api.json` / `<name>.api.json` 必须是从 ComfyUI 中通过 **Dev Mode -> Save / Export (API)** 导出的 API JSON（以节点 ID 为键、包含 `class_type` 与 `inputs`）。请勿直接放入包含 `nodes` / `links` 数组的编辑器画布 JSON。
 

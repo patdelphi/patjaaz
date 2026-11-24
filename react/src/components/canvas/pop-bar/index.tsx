@@ -2,7 +2,10 @@
 import { useCanvas } from '@/contexts/canvas'
 import { useExcalidrawChange } from '@/hooks/use-excalidraw-change'
 import { isBlockArrowElement } from '@/lib/blockArrow'
-import { normalizeCanvasImageForChat } from '@/lib/canvasChatImage'
+import {
+  extractSelectedCanvasTexts,
+  normalizeCanvasImageForChat,
+} from '@/lib/canvasChatImage'
 import { TCanvasAddImagesToChatEvent } from '@/lib/event'
 import {
   ExcalidrawElement,
@@ -24,6 +27,7 @@ const CanvasPopbarWrapper = () => {
   const [showBlockArrow, setShowBlockArrow] = useState(false)
 
   const selectedImagesRef = useRef<TCanvasAddImagesToChatEvent>([])
+  const selectedTextsRef = useRef<string[]>([])
   const selectedTextElementsRef = useRef<OrderedExcalidrawElement[]>([])
   const selectedStrokeElementsRef = useRef<ExcalidrawElement[]>([])
   const selectedBlockArrowsRef = useRef<ExcalidrawElement[]>([])
@@ -75,7 +79,13 @@ const CanvasPopbarWrapper = () => {
       const attachment = normalizeCanvasImageForChat(image, file)
       return attachment ? [attachment] : []
     })
-    setShowAddToChat(selectedImagesRef.current.length > 0)
+
+    // 提取选中的文字框及选中图形内部绑定的文字，按阅读顺序排列供一键加入对话脚本
+    selectedTextsRef.current = extractSelectedCanvasTexts(elements, selectedIds)
+
+    setShowAddToChat(
+      selectedImagesRef.current.length > 0 || selectedTextsRef.current.length > 0
+    )
 
     let centerX: number
     let bottomY: number
@@ -123,6 +133,7 @@ const CanvasPopbarWrapper = () => {
             <CanvasPopbarContainer
               pos={pos}
               selectedImages={selectedImagesRef.current}
+              selectedTexts={selectedTextsRef.current}
               selectedTextElements={selectedTextElementsRef.current}
               selectedStrokeElements={selectedStrokeElementsRef.current}
               selectedBlockArrows={selectedBlockArrowsRef.current}

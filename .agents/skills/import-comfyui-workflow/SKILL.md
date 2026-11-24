@@ -5,7 +5,17 @@ description: 当用户给出 ComfyUI 导出的 API JSON 工作流文件或要求
 
 # 导入 ComfyUI 工作流到 Jaaz
 
-当用户只提供了一个 ComfyUI 导出的 `*.api.json` 文件（或一句简单说明）时，按以下 4 步直接帮用户完成全部导入，无需用户手工编写或配置节点：
+当用户只提供了一个 ComfyUI 导出的 `*.api.json` 文件（或一句简单说明），或者向 `workflows/source/` 放入了新原始 API JSON 文件时，按以下步骤直接帮用户完成全部导入，无需用户手工编写或配置节点：
+
+## 第 0 步（若用户让自动检查 `workflows/source/`）
+
+运行检测命令，查看尚未导入的新文件与更新文件：
+
+```powershell
+server\.venv\Scripts\python.exe server\scripts\workflow_cli.py check-source
+```
+
+自动解析入库默认关闭，需用户在设置里手动开启或点击“AI 自动导入新文件”；也可以由你直接根据 `check-source` 返回的 `new` / `updated` 列表逐一按第 1–4 步高质量补全并导入（对缺失 `class_type` 的 `UNKNOWN` 占位节点仅对导入副本修复，禁止修改 `workflows/source/` 原文件）。
 
 ## 第 1 步：提取工作流节点摘要
 
@@ -37,10 +47,10 @@ server\.venv\Scripts\python.exe server\scripts\workflow_cli.py inspect "<用户�
 
 ## 第 3 步：严格校验并安装到 `workflows/` 与数据库
 
-将生成好的配置文件写入临时文件后运行安装命令（自动执行 `validate_workflow_pack`、落盘到 `workflows/<name>/{workflow.api.json, jaaz.workflow.json}` 并写入 SQLite 数据库）：
+将生成好的配置文件写入临时文件后运行安装命令（自动执行 `validate_workflow_pack`、落盘到 `workflows/<name>/{workflow.api.json, jaaz.workflow.json}` 并写入 SQLite 数据库；若源文件来自 `workflows/source/`，建议附加 `--source-file` 以便增量去重）：
 
 ```powershell
-server\.venv\Scripts\python.exe server\scripts\workflow_cli.py install "<workflow.api.json>" "<生成的jaaz.workflow.json>"
+server\.venv\Scripts\python.exe server\scripts\workflow_cli.py install "<workflow.api.json>" "<生成的jaaz.workflow.json>" --source-file "<原始文件名.json>"
 ```
 
 若返回校验报错（例如 `node_id` 或 `node_input_name` 不匹配），根据错误信息直接修正配置并重新运行 `install`。

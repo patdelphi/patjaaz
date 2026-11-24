@@ -11,6 +11,7 @@ import CanvasTextBackground from './CanvasTextBackground'
 type CanvasPopbarContainerProps = {
   pos: { x: number; y: number }
   selectedImages: TCanvasAddImagesToChatEvent
+  selectedTexts: string[]
   selectedTextElements: OrderedExcalidrawElement[]
   selectedStrokeElements: ExcalidrawElement[]
   selectedBlockArrows: ExcalidrawElement[]
@@ -23,6 +24,7 @@ type CanvasPopbarContainerProps = {
 const CanvasPopbarContainer = ({
   pos,
   selectedImages,
+  selectedTexts,
   selectedTextElements,
   selectedStrokeElements,
   selectedBlockArrows,
@@ -53,7 +55,12 @@ const CanvasPopbarContainer = ({
         {showBlockArrow && (
           <CanvasBlockArrowControls selectedBlockArrows={selectedBlockArrows} />
         )}
-        {showAddToChat && <CanvasPopbar selectedImages={selectedImages} />}
+        {showAddToChat && (
+          <CanvasPopbar
+            selectedImages={selectedImages}
+            selectedTexts={selectedTexts}
+          />
+        )}
       </div>
     </motion.div>
   )

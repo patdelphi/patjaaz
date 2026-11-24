@@ -196,6 +196,8 @@ const startPythonApi = async () => {
   if (app.isPackaged) {
     env.UI_DIST_DIR = path.join(process.resourcesPath, 'react', 'dist')
     env.USER_DATA_DIR = app.getPath('userData')
+    // 随包默认工作流只读目录；后端首次启动时复制到 USER_DATA_DIR/workflows
+    env.JAAZ_BUNDLED_WORKFLOWS_DIR = path.join(process.resourcesPath, 'workflows')
     env.IS_PACKAGED = '1'
   }
 

@@ -9,14 +9,20 @@ import { useTranslation } from 'react-i18next'
 
 type CanvasPopbarProps = {
   selectedImages: TCanvasAddImagesToChatEvent
+  selectedTexts?: string[]
 }
 
-const CanvasPopbar = ({ selectedImages }: CanvasPopbarProps) => {
+const CanvasPopbar = ({ selectedImages, selectedTexts = [] }: CanvasPopbarProps) => {
   const { t } = useTranslation()
   const { excalidrawAPI } = useCanvas()
 
   const handleAddToChat = () => {
-    eventBus.emit('Canvas::AddImagesToChat', selectedImages)
+    if (selectedImages.length > 0) {
+      eventBus.emit('Canvas::AddImagesToChat', selectedImages)
+    }
+    if (selectedTexts.length > 0) {
+      eventBus.emit('Canvas::AddTextToChat', selectedTexts)
+    }
     excalidrawAPI?.updateScene({
       appState: { selectedElementIds: {} },
     })

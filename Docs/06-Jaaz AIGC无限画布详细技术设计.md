@@ -595,3 +595,24 @@ export interface BlockArrowCustomData {
 1. **Agent 引擎灰度开关**：M2 迁移第 1–3 阶段期间，Python 保留 `AGENT_ENGINE=langgraph|pi` 环境变量开关（默认在完成功能对齐前保持可切换）；发现 pi 链路异常时可瞬间切回旧引擎排查。
 2. **数据库平滑备份**：每次 schema 升级自动落盘完整副本，确保升级中断可人工一键回退。
 3. **前端补丁强校验**：`patch-excalidraw.mjs` 在包版本变更或锚点失效时立即拒绝构建，防止带缺陷的渲染代码流入发布产物。
+
+## 附录 C：`workflows/source/` 机制与已导入工作流（2026-11-24）
+
+- 目录：`workflows/source/` 放原始 ComfyUI Export (API) JSON；`workflows/<name>/{workflow.api.json, jaaz.workflow.json}` 是成品包。打包后目录在用户数据目录，可用 `JAAZ_WORKFLOWS_DIR` 覆盖。
+- 检测：`scan_source_workflows_dir` 按源文件 SHA-256 与 API JSON 摘要判定 `new` / `updated` / `already_imported` / `invalid`；`repair_missing_primitive_nodes` 只修复导入副本中丢失 `class_type` 的 `UNKNOWN` 原语节点。
+- 导入：`POST /api/settings/comfyui/workflows/sync_source` 或 CLI `workflow_cli.py sync-source`；服务启动时的自动导入默认关闭，需在设置里手动打开。
+- 运行时：`comfy_dynamic.py` 支持图片/视频/音频上传，未传的可选 `LoadImage/LoadAudio/LoadVideo` 节点在运行前自动裁剪；实例并发由 `max_concurrency` 限流。
+- Agent 工具按能力分组：`image_creator`（t2i/i2i/inpaint/outpaint/rembg）、`video_creator`（t2v/i2v 及视频输出的 upscale）、`audio_creator`（tts/asr/music）。
+
+| 工具名 | 能力 | 输出 | 必填参数 |
+| --- | --- | --- | --- |
+| `text2image_minimax_h3` | t2i | image | `positive_prompt` |
+| `image_edit_multiref_minimax_h3` | i2i | image | `reference_image_1`、`edit_instruction` |
+| `text2video_minimax_h3` | t2v | video | `positive_prompt` |
+| `image2video_first_frame_minimax_h3` | i2v | video | `first_frame_image`、`positive_prompt` |
+| `image2video_first_last_frame_minimax_h3` | i2v | video | `first_frame_image`、`last_frame_image`、`positive_prompt` |
+| `ref2video_minimax_h3_ref2va` | i2v | video | `reference_image`、`positive_prompt` |
+| `ref2video_multiref_minimax_h3_rh` | i2v | video | `reference_image_1`、`reference_image_2`、`positive_prompt` |
+| `video_upscale_seedvr2_3b` | upscale | video | `source_video` |
+| `ref2video_dual_minimax_h3_fl2va_turbo` | i2v | video | `reference_image_1`、`reference_image_2`、`positive_prompt` |
+| `ref2video_multimodal_minimax_h3_rf` | i2v | video | `reference_image_1`、`positive_prompt` |

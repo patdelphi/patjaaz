@@ -64,6 +64,14 @@
       "enum": ["random", "fixed", "param"],
       "default": "random"
     },
+    "source_file": {
+      "type": "string",
+      "description": "可选：workflows/source/ 下对应的原始导出文件名，用于增量检测"
+    },
+    "source_sha256": {
+      "type": "string",
+      "description": "可选：workflows/source/ 下原始文件的 SHA-256 摘要，用于幂等去重"
+    },
     "description": {
       "type": "string",
       "minLength": 1,

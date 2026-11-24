@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "name": "ref2video_dual_minimax_h3_fl2va_turbo",
+  "display_name": "MiniMax H3 FL2VA 双图参考生视频 (Turbo)",
+  "capability": "i2v",
+  "output_kind": "video",
+  "enabled": true,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用 MiniMax H3 FL2VA + 8-step Turbo LoRA，通过两张参考图控制角色/道具/场景主体一致性并生成带音频短视频（24 fps）。\n\n**必填参数：**\n- reference_image_1：必填，第 1 张参考图文件名（工作流输入槽位为 `ref_images.ref_image_0`）。\n- reference_image_2：必填，第 2 张参考图文件名（工作流输入槽位为 `ref_images.ref_image_1`）。\n- positive_prompt：必填，动作与镜头描述，建议在提示词中写明 `ref_images.ref_image_0` 与 `ref_images.ref_image_1` 分别对应哪张参考图的特征。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传完整枚举字符串，默认 \"9:16 (Portrait Widescreen)\"。\n- megapixels：像素档，默认 0.9。\n- duration_seconds：视频时长（秒），默认 7.0。\n\n**依赖与修复备注：** 导入时已将原工作流丢失 class_type 的节点 68/77/102/108/119 自动修复为合法原语与内联种子；固定 8 步 res_multistep + 8-step Turbo LoRA (0.75) + KJNodes SageAttention 补丁，需目标 ComfyUI 已安装 `ComfyUI-KJNodes`。",
+  "inputs": [
+    {
+      "name": "reference_image_1",
+      "type": "image",
+      "required": true,
+      "node_id": "62",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。第 1 张参考图文件名（对应提示词中的 ref_images.ref_image_0）。"
+    },
+    {
+      "name": "reference_image_2",
+      "type": "image",
+      "required": true,
+      "node_id": "63",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。第 2 张参考图文件名（对应提示词中的 ref_images.ref_image_1）。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "119",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。描述两张参考图主体的互动、动作与运镜，可用 ref_images.ref_image_0 和 ref_images.ref_image_1 指代对应图片。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "78",
+      "node_input_name": "aspect_ratio",
+      "default_value": "9:16 (Portrait Widescreen)",
+      "description": "可选。输出画面比例，必须原样传 Allowed options 中的完整字符串之一（不可简写）；默认 \"9:16 (Portrait Widescreen)\"。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "78",
+      "node_input_name": "megapixels",
+      "default_value": 0.9,
+      "description": "可选。输出分辨率像素档位（单位百万像素 MP），视频推荐 0.4–0.98，默认 0.9。"
+    },
+    {
+      "name": "duration_seconds",
+      "type": "number",
+      "required": false,
+      "node_id": "81",
+      "node_input_name": "value",
+      "default_value": 7.0,
+      "description": "可选。视频时长（秒），默认 7.0。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "双图参考生视频_MiniMax-H3-FL2VA_Turbo版.json",
+  "source_sha256": "2182693367992a4967b84092dc35d7242da544bb1a29258654b736a5901f8acf"
+}

@@ -51,6 +51,10 @@ async def handle_chat(data: Dict[str, Any]) -> None:
     # TODO: save and fetch system prompt from db or settings config
     system_prompt: Optional[str] = data.get('system_prompt')
 
+    # 空消息列表（例如仅新建空白画布）无需启动智能体会话。
+    if not messages:
+        return
+
     # 任务运行中收到相同会话的重复提交时直接复用当前任务。
     if not reserve_stream_session(session_id):
         return

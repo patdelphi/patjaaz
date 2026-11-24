@@ -1,0 +1,533 @@
+{
+  "1": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "2": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "3": {
+    "inputs": {
+      "sampler_name": "res_multistep"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "4": {
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "5": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "6": {
+    "inputs": {
+      "noise_seed": 666900155255488
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "7": {
+    "inputs": {
+      "UNKNOWN": 15
+    },
+    "_meta": {
+      "title": ""
+    }
+  },
+  "8": {
+    "inputs": {
+      "UNKNOWN": 24
+    },
+    "_meta": {
+      "title": ""
+    }
+  },
+  "9": {
+    "inputs": {
+      "UNKNOWN": 1024
+    },
+    "_meta": {
+      "title": ""
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": "1f3256ed6644c41f9ea7c8067616bf3b0d4c56c9f3435f2a43cf75cee49d691c.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "None"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "12": {
+    "inputs": {
+      "image": "None"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": "None"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "14": {
+    "inputs": {
+      "image": "None"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "15": {
+    "inputs": {
+      "width": [
+        "9",
+        0
+      ],
+      "height": [
+        "9",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 32,
+      "device": "cpu",
+      "image": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Calc width/height from first image",
+      "aux_id": "kijai/ComfyUI-KJNodes",
+      "ver": "b23194124ef9751eb27cd1fb6aa7858080e692ac"
+    }
+  },
+  "16": {
+    "inputs": {
+      "audio": "None"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "17": {
+    "inputs": {
+      "audio": "None"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "18": {
+    "inputs": {
+      "audio": "None"
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "20": {
+    "inputs": {
+      "sage_attention": "auto",
+      "allow_compile": false,
+      "model": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "Patch Sage Attention KJ",
+      "aux_id": "kijai/ComfyUI-KJNodes",
+      "ver": "b23194124ef9751eb27cd1fb6aa7858080e692ac"
+    }
+  },
+  "21": {
+    "inputs": {
+      "expression": "max(5, round(a * b)) + (5 - (max(5, round(a * b)) % 17)) % 17",
+      "values.a": [
+        "7",
+        0
+      ],
+      "values.b": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "TOTAL_FRAMES",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "22": {
+    "inputs": {
+      "reuse_threshold": 0.20000000000000004,
+      "start_percent": 0.15000000000000002,
+      "end_percent": 0.9000000000000001,
+      "verbose": false,
+      "model": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "EasyCache",
+    "_meta": {
+      "title": "EasyCache",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "23": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 25,
+      "denoise": 1,
+      "model": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "24": {
+    "inputs": {
+      "anything": [
+        "15",
+        1
+      ]
+    },
+    "class_type": "ShowAnything|Mie",
+    "_meta": {
+      "title": "Preview Width",
+      "aux_id": "MieMieeeee/ComfyUI-MieNodes",
+      "ver": "7cd00cca6effe84bc15434b13a79d76d842b86cc"
+    }
+  },
+  "25": {
+    "inputs": {
+      "anything": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "ShowAnything|Mie",
+    "_meta": {
+      "title": "Preview Height",
+      "aux_id": "MieMieeeee/ComfyUI-MieNodes",
+      "ver": "7cd00cca6effe84bc15434b13a79d76d842b86cc"
+    }
+  },
+  "26": {
+    "inputs": {
+      "prompt": [
+        "34",
+        0
+      ],
+      "width": [
+        "15",
+        1
+      ],
+      "height": [
+        "15",
+        2
+      ],
+      "length": [
+        "21",
+        1
+      ],
+      "ref_image_size": "match",
+      "clip": [
+        "5",
+        0
+      ],
+      "vae": [
+        "1",
+        0
+      ],
+      "audio_vae": [
+        "2",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "10",
+        0
+      ],
+      "ref_images.ref_image_1": [
+        "11",
+        0
+      ],
+      "ref_images.ref_image_2": [
+        "12",
+        0
+      ],
+      "ref_audios.ref_audio_0": [
+        "16",
+        0
+      ],
+      "ref_audios.ref_audio_1": [
+        "17",
+        0
+      ],
+      "ref_audios.ref_audio_2": [
+        "18",
+        0
+      ],
+      "ref_images.ref_image_3": [
+        "13",
+        0
+      ],
+      "ref_images.ref_image_4": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "_meta": {
+      "title": "MiniMax H3 参考转视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "27": {
+    "inputs": {
+      "model": [
+        "22",
+        0
+      ],
+      "conditioning": [
+        "26",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "28": {
+    "inputs": {
+      "noise": [
+        "6",
+        0
+      ],
+      "guider": [
+        "27",
+        0
+      ],
+      "sampler": [
+        "3",
+        0
+      ],
+      "sigmas": [
+        "23",
+        0
+      ],
+      "latent_image": [
+        "26",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "29": {
+    "inputs": {
+      "samples": [
+        "28",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码（音频）",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "30": {
+    "inputs": {
+      "samples": [
+        "28",
+        0
+      ],
+      "vae": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "31": {
+    "inputs": {
+      "fps": [
+        "33",
+        0
+      ],
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "chroma_subsampling": "auto",
+      "codec": "none",
+      "images": [
+        "30",
+        0
+      ],
+      "audio": [
+        "29",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "32": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "video": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  },
+  "33": {
+    "inputs": {
+      "int": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "intToFloat _O",
+    "_meta": {
+      "title": "intToFloat _O",
+      "aux_id": "omar92/ComfyUI-QualityOfLifeSuit_Omar92",
+      "ver": "793b6d27e9e501e56aeb630cb502462bc0af9fed"
+    }
+  },
+  "34": {
+    "inputs": {
+      "value": "女生用相机拍摄远方"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Input Text (Prompt)",
+      "cnr_id": "comfy-core",
+      "ver": "0.45.0"
+    }
+  }
+}

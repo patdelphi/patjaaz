@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, create_model
 
 from routers.comfyui_execution import upload_image
 from services.comfy_instance_service import comfy_instance_service
-from services.config_service import FILES_DIR, IMAGE_FORMATS
+from services.config_service import FILES_DIR, IMAGE_FORMATS, VIDEO_FORMATS
 from services.db_service import db_service
 from services.websocket_service import broadcast_session_update, send_to_websocket
 from tools.video_generation.video_canvas_utils import generate_new_video_element
@@ -32,25 +32,98 @@ from .utils.image_canvas_utils import (
 )
 
 SEED_FIELD_NAMES = ("seed", "noise_seed")
+AUDIO_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac")
+ALL_VIDEO_FORMATS = VIDEO_FORMATS + (".webm",)
+LOAD_MEDIA_NODE_TYPES = ("LoadImage", "LoadAudio", "LoadVideo")
 
 
-def resolve_comfy_input_image_path(value: Any, files_dir: str = FILES_DIR) -> Optional[str]:
-    """校验 ComfyUI 工作流传入的本地图像文件名并解析到 files_dir 内，禁止越界或静默忽略缺失文件。"""
-    if not isinstance(value, str) or not value.lower().endswith(IMAGE_FORMATS):
+def _allowed_extensions_for_media_kind(media_kind: Optional[str]) -> tuple[str, ...]:
+    """按参数类型返回允许解析并上传到 ComfyUI 的本地媒体后缀列表。"""
+    kind = str(media_kind or "image").strip().lower()
+    if kind == "video":
+        return ALL_VIDEO_FORMATS
+    if kind == "audio":
+        return AUDIO_FORMATS
+    if kind == "any":
+        return IMAGE_FORMATS + ALL_VIDEO_FORMATS + AUDIO_FORMATS
+    return IMAGE_FORMATS
+
+
+def resolve_comfy_input_media_path(
+    value: Any,
+    files_dir: str = FILES_DIR,
+    media_kind: Optional[str] = None,
+) -> Optional[str]:
+    """校验 ComfyUI 工作流传入的本地图片/视频/音频文件名并解析到 files_dir 内，禁止越界或忽略缺失文件。"""
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped or stripped.lower() == "none":
         return None
 
-    stripped = value.strip()
+    allowed_exts = _allowed_extensions_for_media_kind(media_kind)
+    if not stripped.lower().endswith(allowed_exts):
+        return None
+
     if stripped.startswith("/api/file/"):
-        filename = stripped[len("/api/file/"):]
+        filename = stripped[len("/api/file/") :]
     elif stripped.startswith(("http://", "https://")) and "/api/file/" in stripped:
         filename = stripped.split("/api/file/", 1)[1]
     else:
         filename = stripped
 
-    image_path = safe_file_id_path(files_dir, filename)
-    if not os.path.exists(image_path) or not os.path.isfile(image_path):
-        raise FileNotFoundError(f"Input image not found: {filename}")
-    return image_path
+    media_path = safe_file_id_path(files_dir, filename)
+    if not os.path.exists(media_path) or not os.path.isfile(media_path):
+        raise FileNotFoundError(f"Input media not found: {filename}")
+    return media_path
+
+
+def resolve_comfy_input_image_path(
+    value: Any, files_dir: str = FILES_DIR
+) -> Optional[str]:
+    """校验 ComfyUI 工作流传入的本地图像文件名（向下兼容别名）。"""
+    return resolve_comfy_input_media_path(value, files_dir=files_dir, media_kind="image")
+
+
+def _prune_unused_optional_media_node(updated: Dict[str, Any], node_key: str) -> None:
+    """当可选 LoadImage/LoadAudio/LoadVideo 节点未传值时，移除下游连线并删除该节点。"""
+    node_obj = updated.get(node_key)
+    if not isinstance(node_obj, dict):
+        return
+    if str(node_obj.get("class_type") or "") not in LOAD_MEDIA_NODE_TYPES:
+        return
+
+    for other_id, other_node in updated.items():
+        if other_id == node_key or not isinstance(other_node, dict):
+            continue
+        other_inputs = other_node.get("inputs")
+        if not isinstance(other_inputs, dict):
+            continue
+        keys_to_remove = [
+            k
+            for k, v in other_inputs.items()
+            if isinstance(v, list)
+            and len(v) == 2
+            and str(v[0]) == str(node_key)
+            and isinstance(v[1], int)
+        ]
+        for k in keys_to_remove:
+            other_inputs.pop(k, None)
+
+    updated.pop(node_key, None)
+
+
+def _restore_integer_value(param: Dict[str, Any], value: Any) -> Any:
+    """number 参数默认值为整数且传入值是整数值的浮点数时，写回整数，避免 ComfyUI INT 输入收到 736.0。"""
+    default_val = param.get("default_value")
+    if (
+        isinstance(default_val, int)
+        and not isinstance(default_val, bool)
+        and isinstance(value, float)
+        and value.is_integer()
+    ):
+        return int(value)
+    return value
 
 
 def apply_workflow_inputs_and_seeds(
@@ -60,25 +133,35 @@ def apply_workflow_inputs_and_seeds(
     seed_generator: Optional[Callable[[], int]] = None,
     seed_strategy: str = "random",
 ) -> Dict[str, Any]:
-    """注入用户参数并按 seed_strategy（random/fixed/param）处理节点 seed / noise_seed。"""
+    """注入用户参数、裁剪未传入的可选媒体节点，并按 seed_strategy 处理节点 seed / noise_seed。"""
     updated = copy.deepcopy(workflow_dict)
     explicit_node_fields: set[tuple[str, str]] = set()
 
     for param in input_defs:
         param_name = param.get("name")
+        param_type = str(param.get("type") or "string").strip().lower()
+        is_required = bool(param.get("required", False))
         node_id = param.get("node_id")
         node_input_name = param.get("node_input_name")
 
         if not (param_name and node_id and node_input_name):
             continue
 
-        if param_name in required_data and required_data[param_name] is not None:
-            value = required_data[param_name]
-            node_key = str(node_id)
+        node_key = str(node_id)
+        val = required_data.get(param_name)
+        is_empty_media = val is None or (
+            isinstance(val, str) and val.strip().lower() in ("", "none")
+        )
+
+        if not is_required and param_type in ("image", "audio", "video") and is_empty_media:
+            _prune_unused_optional_media_node(updated, node_key)
+            continue
+
+        if param_name in required_data and val is not None:
             if node_key in updated and isinstance(updated[node_key], dict):
                 node_inputs = updated[node_key].get("inputs")
                 if isinstance(node_inputs, dict) and node_input_name in node_inputs:
-                    node_inputs[node_input_name] = value
+                    node_inputs[node_input_name] = _restore_integer_value(param, val)
                     explicit_node_fields.add((node_key, str(node_input_name)))
 
     if seed_strategy == "random":
@@ -90,7 +173,11 @@ def apply_workflow_inputs_and_seeds(
             if not isinstance(node_inputs, dict):
                 continue
             for seed_key in SEED_FIELD_NAMES:
-                if seed_key in node_inputs and (str(node_id), seed_key) not in explicit_node_fields:
+                if (
+                    seed_key in node_inputs
+                    and not isinstance(node_inputs[seed_key], list)
+                    and (str(node_id), seed_key) not in explicit_node_fields
+                ):
                     node_inputs[seed_key] = rng()
 
     return updated
@@ -99,8 +186,7 @@ def apply_workflow_inputs_and_seeds(
 def _python_type(param_type: str, default: Any):
     """Map simple param types to Python types."""
     if param_type == "number":
-        if isinstance(default, int):
-            return int
+        # 统一用 float 接收，避免默认值为整数时 Agent 传入小数（如 7.5 秒）校验失败；写回节点时再还原整数
         return float
     if param_type == "boolean" or param_type == "bool":
         return bool
@@ -172,7 +258,9 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         ctx["tool_call_id"] = tool_call_id
 
         try:
-            instance = await comfy_instance_service.resolve_instance(wf.get("instance_id"))
+            instance = await comfy_instance_service.resolve_instance(
+                wf.get("instance_id"), capability=wf.get("capability")
+            )
         except Exception as exc:
             await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
             return f"image generation failed: {str(exc)}"
@@ -180,37 +268,10 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         api_url = str(instance["base_url"]).rstrip("/")
         auth_headers = dict(instance.get("headers") or {})
         instance_id = str(instance.get("id") or "default")
-        timeout_sec = float(instance.get("timeout_sec") or 600)
-
-        required_data = dict(kwargs)
-        try:
-            for key, value in required_data.items():
-                image_path = resolve_comfy_input_image_path(value, FILES_DIR)
-                if not image_path:
-                    continue
-                filename = os.path.basename(image_path)
-                with open(image_path, "rb") as image_file:
-                    image_bytes = image_file.read()
-                sha256_hex = comfy_instance_service.compute_bytes_sha256(image_bytes)
-                cached_name = comfy_instance_service.get_cached_upload(
-                    instance_id, sha256_hex
-                )
-                if cached_name:
-                    required_data[key] = cached_name
-                else:
-                    image_stream = BytesIO(image_bytes)
-                    image_name = await upload_image(
-                        image_stream, api_url, filename, headers=auth_headers
-                    )
-                    comfy_instance_service.set_cached_upload(
-                        instance_id, sha256_hex, image_name
-                    )
-                    required_data[key] = image_name
-        except (PathSecurityError, FileNotFoundError) as exc:
-            await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
-            return f"image generation failed: {str(exc)}"
-
-        workflow_dict = await db_service.get_comfy_workflow(wf["id"])
+        # 生成任务不设总超时（视频可能很久）；实例的 timeout_sec 字段仅保留兼容，不再参与执行
+        max_concurrency = int(instance.get("max_concurrency") or 1)
+        # 上传缓存键同时包含实例 ID 与地址，实例改地址后不会误命中旧文件引用
+        upload_cache_key = f"{instance_id}|{api_url}"
 
         try:
             input_defs: List[Dict[str, Any]] = (
@@ -220,6 +281,45 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             )
         except Exception:
             input_defs = []
+        param_type_by_name = {
+            str(p.get("name") or ""): str(p.get("type") or "string").strip().lower()
+            for p in input_defs
+            if isinstance(p, dict) and p.get("name")
+        }
+
+        required_data = dict(kwargs)
+        try:
+            for key, value in required_data.items():
+                p_type = param_type_by_name.get(key, "image")
+                media_kind = p_type if p_type in ("image", "video", "audio") else "image"
+                media_path = resolve_comfy_input_media_path(
+                    value, FILES_DIR, media_kind=media_kind
+                )
+                if not media_path:
+                    continue
+                filename = os.path.basename(media_path)
+                with open(media_path, "rb") as media_file:
+                    media_bytes = media_file.read()
+                sha256_hex = comfy_instance_service.compute_bytes_sha256(media_bytes)
+                cached_name = comfy_instance_service.get_cached_upload(
+                    upload_cache_key, sha256_hex
+                )
+                if cached_name:
+                    required_data[key] = cached_name
+                else:
+                    media_stream = BytesIO(media_bytes)
+                    uploaded_name = await upload_image(
+                        media_stream, api_url, filename, headers=auth_headers
+                    )
+                    comfy_instance_service.set_cached_upload(
+                        upload_cache_key, sha256_hex, uploaded_name
+                    )
+                    required_data[key] = uploaded_name
+        except (PathSecurityError, FileNotFoundError) as exc:
+            await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
+            return f"image generation failed: {str(exc)}"
+
+        workflow_dict = await db_service.get_comfy_workflow(wf["id"])
 
         seed_strategy = str(wf.get("seed_strategy") or "random")
         workflow_dict = apply_workflow_inputs_and_seeds(
@@ -246,16 +346,20 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             )
         except Exception as job_exc:
             print(f"[comfy_dynamic] Warning creating job record: {job_exc}")
+        # 让执行层能把远端 prompt_id 回写到这条任务
+        ctx["job_id"] = job_id
 
         try:
             generator = ComfyUIWorkflowRunner(
                 workflow_dict,
                 api_url,
                 headers=auth_headers,
-                timeout=timeout_sec,
+                timeout=None,
                 instance_id=instance_id,
             )
-            outputs = await generator.generate(ctx=ctx)
+            # 按实例 max_concurrency 限流：超出的任务排队等待，而不是同时提交到同一实例
+            async with comfy_instance_service.acquire_slot(instance_id, max_concurrency):
+                outputs = await generator.generate(ctx=ctx)
             require_generation_outputs(outputs)
             if not isinstance(outputs, list) or (
                 outputs and not isinstance(outputs[0], (list, tuple))

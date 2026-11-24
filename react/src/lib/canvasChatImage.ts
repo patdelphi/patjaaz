@@ -89,3 +89,41 @@ export async function canvasChatImageToFile(
   const fileType = blob.type || 'image/png'
   return new File([blob], fileName, { type: fileType })
 }
+
+type CanvasTextLike = {
+  id: string
+  type?: string
+  isDeleted?: boolean
+  x?: number
+  y?: number
+  text?: string
+  containerId?: string | null
+}
+
+/** 提取当前选中的文字框及选中图形内绑定的文字内容，按从上到下、从左到右去重排序。 */
+export function extractSelectedCanvasTexts(
+  elements: ReadonlyArray<CanvasTextLike>,
+  selectedIds: Readonly<Record<string, boolean | undefined>>
+): string[] {
+  const matched = elements
+    .filter(
+      (element) =>
+        !element.isDeleted &&
+        element.type === 'text' &&
+        Boolean(
+          selectedIds[element.id] ||
+            (element.containerId && selectedIds[element.containerId])
+        )
+    )
+    .sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0))
+
+  const seenIds = new Set<string>()
+  const texts: string[] = []
+  for (const node of matched) {
+    if (seenIds.has(node.id)) continue
+    seenIds.add(node.id)
+    const raw = String(node.text || '').trim()
+    if (raw) texts.push(raw)
+  }
+  return texts
+}

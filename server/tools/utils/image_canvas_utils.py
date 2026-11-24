@@ -35,7 +35,11 @@ async def generate_new_image_element(
 
 
 
-    new_x, new_y = await find_next_best_element_position(canvas_data)
+    new_x, new_y = await find_next_best_element_position(
+        canvas_data,
+        target_width=int(image_data.get("width") or 1024),
+        target_height=int(image_data.get("height") or 1024),
+    )
 
     return {
         "type": "image",

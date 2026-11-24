@@ -344,10 +344,19 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
       textareaRef.current?.focus()
     }
 
+    const handleAddTextToChat = (texts: string[]) => {
+      const joined = texts.map((item) => item.trim()).filter(Boolean).join('\n\n')
+      if (!joined) return
+      setPrompt((prev) => (prev.trim() ? `${prev.trim()}\n\n${joined}` : joined))
+      textareaRef.current?.focus()
+    }
+
     eventBus.on('Canvas::AddImagesToChat', handleAddImagesToChat)
+    eventBus.on('Canvas::AddTextToChat', handleAddTextToChat)
     eventBus.on('Material::AddImagesToChat', handleMaterialAddImagesToChat)
     return () => {
       eventBus.off('Canvas::AddImagesToChat', handleAddImagesToChat)
+      eventBus.off('Canvas::AddTextToChat', handleAddTextToChat)
       eventBus.off('Material::AddImagesToChat', handleMaterialAddImagesToChat)
     }
   }, [uploadImageFiles, t])

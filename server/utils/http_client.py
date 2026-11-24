@@ -22,12 +22,28 @@ HTTP 客户端工厂和管理器
        response = client.get("https://api.example.com/data")
 """
 
+import os
 import ssl
 import certifi
 import httpx
 from typing import Optional, Dict, Any, AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 import aiohttp
+
+
+def _ensure_localhost_no_proxy() -> None:
+    """确保本地回环地址不走系统 HTTP 代理，避免 CLI 或探测本机 ComfyUI 时出现 502。"""
+    bypass = {"127.0.0.1", "localhost", "::1"}
+    current = (
+        set(os.environ.get("no_proxy", "").split(","))
+        | set(os.environ.get("NO_PROXY", "").split(","))
+    )
+    merged = ",".join(sorted((bypass | current) - {""}))
+    os.environ["no_proxy"] = merged
+    os.environ["NO_PROXY"] = merged
+
+
+_ensure_localhost_no_proxy()
 
 
 class HttpClient:

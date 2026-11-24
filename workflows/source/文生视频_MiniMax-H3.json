@@ -1,0 +1,379 @@
+{
+  "92": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "video": [
+        "140:130",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "115": {
+    "inputs": {
+      "aspect_ratio": "16:9 (Widescreen)",
+      "megapixels": 0.4,
+      "multiple": 32
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "分辨率选择器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:119": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:120": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:121": {
+    "inputs": {
+      "samples": [
+        "140:125",
+        0
+      ],
+      "vae": [
+        "140:120",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE解码（音频）",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:122": {
+    "inputs": {
+      "samples": [
+        "140:125",
+        0
+      ],
+      "vae": [
+        "140:119",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:123": {
+    "inputs": {
+      "sampler_name": "res_multistep"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:124": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": [
+        "140:136",
+        0
+      ],
+      "denoise": 1,
+      "model": [
+        "140:135",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本调度器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:125": {
+    "inputs": {
+      "noise": [
+        "140:129",
+        0
+      ],
+      "guider": [
+        "140:126",
+        0
+      ],
+      "sampler": [
+        "140:123",
+        0
+      ],
+      "sigmas": [
+        "140:124",
+        0
+      ],
+      "latent_image": [
+        "140:131",
+        1
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:126": {
+    "inputs": {
+      "model": [
+        "140:135",
+        0
+      ],
+      "conditioning": [
+        "140:131",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本引导器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:127": {
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:128": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:129": {
+    "inputs": {
+      "noise_seed": 739005110973144
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:130": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "chroma_subsampling": "auto",
+      "codec": "none",
+      "images": [
+        "140:122",
+        0
+      ],
+      "audio": [
+        "140:121",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:131": {
+    "inputs": {
+      "prompt": "# 15 秒古代武侠卡通短片脚本\n\n## 整体设定\n\n**片名：**《竹影追魂剑》\n**风格：** 复古邵氏武侠电影质感，古装卡通化演绎，鲜艳戏服色彩，舞台感布景，强烈明暗对比，夸张但有章法的武打动作，老式电影颗粒感，开场锣、战鼓、刀剑碰撞声贯穿节奏。\n**主角：** 少年剑客 “青岚”，青布劲装，束发高马尾，肩背细长宝剑，眼神锋利，动作轻快，性格倔强。\n**反派：** 黑衣杀手 “无影”，玄色窄袖长袍，面遮黑巾，双刀在手，身法诡异，擅长偷袭。\n**核心故事：** 青岚为报师门旧仇，独闯竹林寻仇；无影突然现身截杀，双方从竹林交手到古庙决战，最终青岚以一招 “竹影斩” 反败为胜。\n\n---\n\n## 0-3 秒｜竹林序幕，剑客登场\n\n画面是复古武侠电影的竹林布景，青绿色竹竿层叠，薄雾穿行其间。镜头从竹叶缝隙快速掠过，落在少年剑客青岚身上。青岚从竹林阴影中缓步走出，青布劲装被风吹起，右手按住剑柄，抬头望向竹林深处。地面落叶被气流卷起，形成杀气预兆。镜头先低角度仰拍，再快速推近到他坚定的眼神。\n\n音效：开场铜锣一响，风吹竹叶沙沙声，远处低沉鼓点。\n转场：一片竹叶从画面前方横扫而过，遮满镜头，切入下一幕。\n\n---\n\n## 3-6 秒｜竹林伏击，双刀突袭\n\n竹叶掠过之后，黑衣杀手无影从竹树上倒挂落下，双刀直劈青岚头顶。青岚后脊一惊，瞬间拔剑格挡，火星在画面中央爆开。无影身形贴地滑过，双刀连环斩击，青岚踩着竹竿借力后翻，衣摆拉出弧线。镜头跟随两人动作快速横移，刀剑碰撞形成节奏点。\n\n音效：刀剑 “锵锵” 连续碰撞，战鼓加速，衣料破风声。\n转场：双方兵器交击产生的白色火花铺满画面，变成古庙灯火。\n\n---\n\n## 6-9 秒｜古庙决战，招式拆解\n\n场景转入复古武侠片常见的古庙庭院，墙面斑驳，灯笼摇晃，地面尘土飞扬。无影双刀突然交叉成十字斩，青岚侧身避开，剑刃擦过衣角。青岚踏上香案桌面，凌空翻身，剑锋划出一道青绿色弧光。无影用双刀锁住长剑，两人近距离角力，表情都狠厉专注。镜头环绕半圈，突出两人对峙的压迫感。\n\n音效：急促战鼓，木桌碎裂声，兵器锁死的金属摩擦声。\n转场：青绿色剑光旋转扩大，形成圆形剑轮，转入最终必杀技。\n\n---\n\n## 9-12 秒｜竹影斩出，逆转一击\n\n剑轮收束，青岚突然拔出宝剑，身体旋身跃起，身后浮现数道竹叶形剑气。无影双刀横扫，但被青岚的剑气层层震开。青岚落地时压低重心，剑锋贴着地面向前推进，尘土和竹叶被剑气推开，形成一条笔直光路。镜头先仰拍青岚跃起，再跟随剑光贴地俯冲，最后定格在无影被震退的瞬间。\n\n音效：剑鸣长响，战鼓重击，竹叶破风声，无影被击飞的短促惨叫。\n转场：地面光路向前延伸，变成结尾夕阳中的竹林小径。\n\n---\n\n## 12-15 秒｜夕阳收刀，江湖余韵\n\n结尾画面回到竹林小径，夕阳从竹竿缝隙照下。青岚背对镜头站在路中央，将剑缓慢收回鞘中。远处无影倒在尘埃里，双刀脱手飞出。镜头从青岚身后缓缓拉远，竹叶飘落，画面出现老式武侠片式定格：青岚回头半瞥，衣角轻晃，眼神冷峻。最后画面像旧电影胶片一样轻微闪烁，慢慢淡去。\n\n音效：长剑入鞘的清脆 “咔” 声，锣鼓收尾，远处乌鸦一声长鸣，风声渐弱。\n转场：竹叶飘落覆盖镜头，画面定格淡出。\n\n---\n\n## 角色细节补充\n\n**青岚：**\n少年剑客，身形清瘦但敏捷，青布劲装，束发高马尾，腰系深色布带，靴底有护腕。拔剑时动作干净，眼神锋利，有少年气，也有江湖恩怨带来的成熟感。服装颜色以青绿、藏青为主，和竹林环境形成呼应。\n\n**无影：**\n黑衣杀手，玄色长袍窄袖，面遮黑巾，只露双眼。双刀短而锋利，动作偏阴险快速，擅长倒挂、贴地斩、交叉斩。服装颜色深黑，和青岚形成鲜明正邪对比。\n\n---\n\n## 画面风格描述\n\n复古邵氏武侠电影质感，卡通化角色但保留老式武侠片的舞台布景、吊威亚动作、定格亮相、锣鼓节奏和强烈戏剧光。竹林、古庙、竹林小径三个场景通过竹叶遮挡、火花闪白、剑轮变形、光路延伸完成流畅转场。动作设计强调剑光、火花、尘土、竹叶和战鼓节拍，整体紧凑、凌厉、有老派江湖味。",
+      "width": [
+        "115",
+        0
+      ],
+      "height": [
+        "115",
+        1
+      ],
+      "length": [
+        "140:132",
+        1
+      ],
+      "clip": [
+        "140:128",
+        0
+      ],
+      "vae": [
+        "140:119",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ImageToVideo",
+    "_meta": {
+      "title": "MiniMax H3 图像转视频",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:132": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "140:133",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "数学表达式",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:133": {
+    "inputs": {
+      "value": 15
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (duration)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:134": {
+    "inputs": {
+      "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "140:127",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:135": {
+    "inputs": {
+      "switch": [
+        "140:139",
+        0
+      ],
+      "on_false": [
+        "140:127",
+        0
+      ],
+      "on_true": [
+        "140:134",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (Model)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:136": {
+    "inputs": {
+      "switch": [
+        "140:139",
+        0
+      ],
+      "on_false": [
+        "140:137",
+        0
+      ],
+      "on_true": [
+        "140:138",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (Steps)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:137": {
+    "inputs": {
+      "value": 20
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "整数",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:138": {
+    "inputs": {
+      "value": 8
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "整数",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  },
+  "140:139": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Boolean (Enable Lightning LoRA)",
+      "cnr_id": "comfy-core",
+      "ver": "0.33.0"
+    }
+  }
+}

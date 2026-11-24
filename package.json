@@ -41,6 +41,10 @@
       {
         "from": "react/dist/",
         "to": "react/dist/"
+      },
+      {
+        "from": "workflows/",
+        "to": "workflows/"
       }
     ],
     "mac": {

@@ -1,13 +1,16 @@
 """程序说明：提供零新增依赖的三协议（OpenAI / Anthropic 原生 / Gemini REST / OpenAI-compatible）大模型适配器与连通性测试。"""
 from __future__ import annotations
 
+import asyncio
 import json
+import random
 import re
 import time
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Sequence, Tuple
 import uuid
 
 import anthropic
+import httpx
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -35,6 +38,15 @@ from services.config_service import (
 from utils.http_client import HttpClient
 
 _DATA_URI_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.DOTALL)
+
+# Gemini REST 可重试状态码与最大尝试次数（Anthropic SDK 自带重试，由 max_retries 控制）
+_GEMINI_RETRY_STATUS = {429, 500, 502, 503, 504}
+_MAX_ATTEMPTS = 3
+
+
+def _retry_delay(attempt: int) -> float:
+    """指数退避加少量抖动：约 1s、2s。"""
+    return (2 ** attempt) + random.uniform(0, 0.4)
 
 
 def _extract_text_blocks(content: Any) -> str:
@@ -454,6 +466,7 @@ class AnthropicNativeChatModel(BaseChatModel):
             api_key=self.api_key,
             base_url=self._normalized_base_url(),
             timeout=self.timeout,
+            max_retries=_MAX_ATTEMPTS,
         )
         req = self._build_request_kwargs(messages, stop=stop, **kwargs)
         resp = client.messages.create(**req)
@@ -471,6 +484,7 @@ class AnthropicNativeChatModel(BaseChatModel):
             api_key=self.api_key,
             base_url=self._normalized_base_url(),
             timeout=self.timeout,
+            max_retries=_MAX_ATTEMPTS,
         )
         req = self._build_request_kwargs(messages, stop=stop, **kwargs)
         resp = await client.messages.create(**req)
@@ -484,10 +498,36 @@ class AnthropicNativeChatModel(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        # 真流式：文本增量即时输出，工具调用在流结束时一次性给出；流在产出任何内容前失败则回退非流式
+        emitted = False
+        try:
+            client = anthropic.AsyncAnthropic(
+                api_key=self.api_key,
+                base_url=self._normalized_base_url(),
+                timeout=self.timeout,
+                max_retries=_MAX_ATTEMPTS,
+            )
+            req = self._build_request_kwargs(messages, stop=stop, **kwargs)
+            async with client.messages.stream(**req) as stream:
+                async for text in stream.text_stream:
+                    if text:
+                        emitted = True
+                        yield ChatGenerationChunk(message=AIMessageChunk(content=text))
+                final_message = await stream.get_final_message()
+            final_ai = parse_anthropic_response(final_message)
+            if final_ai.tool_calls:
+                tool_chunk = _ai_message_to_chunk(final_ai)
+                tool_chunk.content = ""
+                yield ChatGenerationChunk(message=tool_chunk)
+            return
+        except Exception as stream_exc:
+            if emitted:
+                raise
+            print(f"[llm_adapters] 流式请求失败，回退非流式: {type(stream_exc).__name__}: {stream_exc}")
+
         result = await self._agenerate(messages, stop=stop, **kwargs)
         msg = result.generations[0].message
-        chunk = _ai_message_to_chunk(msg)  # type: ignore[arg-type]
-        yield ChatGenerationChunk(message=chunk)
+        yield ChatGenerationChunk(message=_ai_message_to_chunk(msg))  # type: ignore[arg-type]
 
 
 class GeminiNativeChatModel(BaseChatModel):
@@ -571,10 +611,25 @@ class GeminiNativeChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, **kwargs)
         with HttpClient.create_sync(timeout=self.timeout) as client:
-            resp = client.post(
-                self._endpoint_url(), json=payload, headers=self._headers()
-            )
-            resp.raise_for_status()
+            for attempt in range(1, _MAX_ATTEMPTS + 1):
+                try:
+                    resp = client.post(
+                        self._endpoint_url(), json=payload, headers=self._headers()
+                    )
+                    status = getattr(resp, "status_code", 200)
+                    if (
+                        isinstance(status, int)
+                        and status in _GEMINI_RETRY_STATUS
+                        and attempt < _MAX_ATTEMPTS
+                    ):
+                        time.sleep(_retry_delay(attempt))
+                        continue
+                    resp.raise_for_status()
+                    break
+                except httpx.TransportError:
+                    if attempt >= _MAX_ATTEMPTS:
+                        raise
+                    time.sleep(_retry_delay(attempt))
             ai_msg = parse_gemini_response(resp.json())
         return ChatResult(generations=[ChatGeneration(message=ai_msg)])
 
@@ -587,10 +642,25 @@ class GeminiNativeChatModel(BaseChatModel):
     ) -> ChatResult:
         payload = self._build_payload(messages, stop=stop, **kwargs)
         async with HttpClient.create(timeout=self.timeout) as client:
-            resp = await client.post(
-                self._endpoint_url(), json=payload, headers=self._headers()
-            )
-            resp.raise_for_status()
+            for attempt in range(1, _MAX_ATTEMPTS + 1):
+                try:
+                    resp = await client.post(
+                        self._endpoint_url(), json=payload, headers=self._headers()
+                    )
+                    status = getattr(resp, "status_code", 200)
+                    if (
+                        isinstance(status, int)
+                        and status in _GEMINI_RETRY_STATUS
+                        and attempt < _MAX_ATTEMPTS
+                    ):
+                        await asyncio.sleep(_retry_delay(attempt))
+                        continue
+                    resp.raise_for_status()
+                    break
+                except httpx.TransportError:
+                    if attempt >= _MAX_ATTEMPTS:
+                        raise
+                    await asyncio.sleep(_retry_delay(attempt))
             ai_msg = parse_gemini_response(resp.json())
         return ChatResult(generations=[ChatGeneration(message=ai_msg)])
 
@@ -601,6 +671,38 @@ class GeminiNativeChatModel(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        # 真流式（SSE）：文本增量即时输出，functionCall 汇总后在末尾输出；产出内容前失败则回退非流式
+        emitted = False
+        try:
+            payload = self._build_payload(messages, stop=stop, **kwargs)
+            url = self._endpoint_url().replace(":generateContent", ":streamGenerateContent")
+            tool_calls: List[Dict[str, Any]] = []
+            async with HttpClient.create(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST", f"{url}?alt=sse", json=payload, headers=self._headers()
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        raw = line[5:].strip()
+                        if not raw or raw == "[DONE]":
+                            continue
+                        part_msg = parse_gemini_response(json.loads(raw))
+                        text = _extract_text_blocks(part_msg.content)
+                        if text:
+                            emitted = True
+                            yield ChatGenerationChunk(message=AIMessageChunk(content=text))
+                        tool_calls.extend(part_msg.tool_calls or [])
+            if tool_calls:
+                tool_chunk = _ai_message_to_chunk(AIMessage(content="", tool_calls=tool_calls))
+                yield ChatGenerationChunk(message=tool_chunk)
+            return
+        except Exception as stream_exc:
+            if emitted:
+                raise
+            print(f"[llm_adapters] 流式请求失败，回退非流式: {type(stream_exc).__name__}: {stream_exc}")
+
         result = await self._agenerate(messages, stop=stop, **kwargs)
         msg = result.generations[0].message
         yield ChatGenerationChunk(message=_ai_message_to_chunk(msg))  # type: ignore[arg-type]
@@ -658,6 +760,8 @@ def create_chat_model(
         model=model,
         api_key=api_key,  # type: ignore[arg-type]
         timeout=300,
+        # 提供商限流（429）时 SDK 自动指数退避重试，减少并发配额瞬时超限造成的失败
+        max_retries=5,
         base_url=url or None,
         temperature=0,
         http_client=http_client,

@@ -1,8 +1,10 @@
 """程序说明：提供 ComfyUI 多实例管理、反向代理 URL/WS 规范化、鉴权头注入、健康探测、上传去重缓存与任务远端取消联动。"""
 from __future__ import annotations
 
+import asyncio
 import base64
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 import hashlib
 import json
 import time
@@ -103,6 +105,24 @@ class ComfyInstanceService:
         self._active_prompts: Dict[
             str, Dict[tuple[str, str, str], Dict[str, str]]
         ] = {}
+        # instance_id -> (容量, 信号量)；容量变化时重建
+        self._slots: Dict[str, tuple[int, asyncio.Semaphore]] = {}
+
+    @asynccontextmanager
+    async def acquire_slot(self, instance_id: str, max_concurrency: int):
+        """按实例 max_concurrency 限制同时提交的任务数，超出的排队等待。"""
+        capacity = max(1, int(max_concurrency or 1))
+        key = str(instance_id or "default")
+        current = self._slots.get(key)
+        if current is None or current[0] != capacity:
+            current = (capacity, asyncio.Semaphore(capacity))
+            self._slots[key] = current
+        semaphore = current[1]
+        await semaphore.acquire()
+        try:
+            yield
+        finally:
+            semaphore.release()
 
     @staticmethod
     def compute_bytes_sha256(content: bytes) -> str:
@@ -251,10 +271,34 @@ class ComfyInstanceService:
             return [mask_instance_record(item) for item in instances]
         return instances
 
+    @staticmethod
+    def _parse_json_field(value: Any, default: Any) -> Any:
+        """解析数据库中以 JSON 字符串或原生对象存放的字段。"""
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return default
+        return value if value is not None else default
+
+    def _supports_capability(self, item: Dict[str, Any], capability: Optional[str]) -> bool:
+        """实例未声明能力清单或未指定 capability 时视为支持。"""
+        if not capability:
+            return True
+        caps = self._parse_json_field(item.get("capabilities_json"), [])
+        return not caps or capability in caps
+
+    def _known_offline(self, item: Dict[str, Any]) -> bool:
+        """最近一次健康探测明确为离线时返回 True；从未探测视为未知。"""
+        health = self._parse_json_field(item.get("last_health_json"), {})
+        return isinstance(health, dict) and health.get("online") is False
+
     async def resolve_instance(
-        self, instance_id: Optional[str] = None
+        self,
+        instance_id: Optional[str] = None,
+        capability: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """按显式 instance_id 或最高优先级挑选可用的 ComfyUI 实例，兼容 config 回退。"""
+        """按显式 instance_id 或（启用、支持能力、非已知离线、优先级）挑选 ComfyUI 实例，兼容 config 回退。"""
         instances = await self.ensure_default_instance()
         chosen: Optional[Dict[str, Any]] = None
 
@@ -268,8 +312,13 @@ class ComfyInstanceService:
 
         if chosen is None and not instance_id:
             enabled_list = [item for item in instances if item.get("enabled", 1)]
-            if enabled_list:
-                chosen = enabled_list[0]
+            # 优先选声明支持该能力的实例；都不支持时退回全部启用实例，避免默认能力清单漏项导致不可用
+            capable = [i for i in enabled_list if self._supports_capability(i, capability)]
+            pool = capable or enabled_list
+            # 列表已按 priority 排序；已知离线的实例排到最后
+            pool = sorted(pool, key=lambda i: 1 if self._known_offline(i) else 0)
+            if pool:
+                chosen = pool[0]
 
         if chosen is not None:
             result = dict(chosen)

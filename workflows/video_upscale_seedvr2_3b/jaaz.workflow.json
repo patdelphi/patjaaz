@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "name": "video_upscale_seedvr2_3b",
+  "display_name": "SeedVR2 3B 视频超分",
+  "capability": "upscale",
+  "output_kind": "video",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用 SeedVR2 3B INT8 对已有的输入视频进行高保真超分辨率放大与细节修复，并保留原视频帧率与音轨。\n\n**必填参数：**\n- source_video：必填，待超分放大的本地或画布视频文件名（如 `.mp4` / `.mov` / `.webm` 等，不要传图片文件名）。\n\n**可选参数：**\n- scale_multiplier：放大倍率（节点 66:57），默认 2.5；显存紧张时建议改为 1.5 或 2.0。\n- trim_video：是否按时间区间裁剪输入视频后再超分，默认 false。\n- trim_start_time / trim_duration：当 trim_video=true 时的起始秒数与持续秒数，默认 0.0 / 0.0。\n- split_latent：是否启用时间分块以降低显存占用（true/false），默认 false。\n- color_correction_method：颜色校正方式，默认 \"lab\"。\n\n**依赖与固定设置：** 内置 seedvr2_3b_int8_convrot 与 seedvr2_ema_vae_fp16，1 步 Euler、CFG 1；工作流含 ComfyUI-KJNodes 的 ImageCompareKJ 节点，需目标 ComfyUI 已安装该插件与 SeedVR2 节点。",
+  "inputs": [
+    {
+      "name": "source_video",
+      "type": "video",
+      "required": true,
+      "node_id": "73",
+      "node_input_name": "file",
+      "default_value": "",
+      "description": "必填。待超分放大的视频文件名（来自画布或上传的视频，如 abc.mp4）。"
+    },
+    {
+      "name": "scale_multiplier",
+      "type": "number",
+      "required": false,
+      "node_id": "66:57",
+      "node_input_name": "resize_type.multiplier",
+      "default_value": 2.5,
+      "description": "可选。视频分辨率放大倍率，默认 2.5（显存不足可改 1.5 或 2.0）。"
+    },
+    {
+      "name": "trim_video",
+      "type": "boolean",
+      "required": false,
+      "node_id": "66:81",
+      "node_input_name": "switch",
+      "default_value": false,
+      "description": "可选。true 表示只处理裁剪时间段内的视频，false 处理全长；默认 false。"
+    },
+    {
+      "name": "trim_start_time",
+      "type": "number",
+      "required": false,
+      "node_id": "66:79",
+      "node_input_name": "start_time",
+      "default_value": 0.0,
+      "description": "可选。trim_video=true 时的裁剪开始时间（秒），默认 0.0。"
+    },
+    {
+      "name": "trim_duration",
+      "type": "number",
+      "required": false,
+      "node_id": "66:79",
+      "node_input_name": "duration",
+      "default_value": 0.0,
+      "description": "可选。trim_video=true 时的裁剪时长（秒），默认 0.0。"
+    },
+    {
+      "name": "split_latent",
+      "type": "boolean",
+      "required": false,
+      "node_id": "66:105",
+      "node_input_name": "value",
+      "default_value": false,
+      "description": "可选。true 开启 SeedVR2 时间分块以降低长视频显存占用；默认 false。"
+    },
+    {
+      "name": "color_correction_method",
+      "type": "string",
+      "required": false,
+      "node_id": "66:59",
+      "node_input_name": "color_correction_method",
+      "default_value": "lab",
+      "description": "可选。色彩校正算法，默认 \"lab\"。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "视频超分_SeedVR2-3B-INT8.json",
+  "source_sha256": "79bf4c4b4816f5fd97154f1ed41b7ed5e927027939572694e802818ab042f737"
+}

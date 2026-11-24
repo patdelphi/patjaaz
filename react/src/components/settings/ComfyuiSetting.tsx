@@ -358,7 +358,6 @@ export default function ComfyuiSetting({
                         </code>
                         <Badge variant="outline">鉴权: {inst.auth_type}</Badge>
                         <Badge variant="outline">并发: {inst.max_concurrency}</Badge>
-                        <Badge variant="outline">超时: {inst.timeout_sec}s</Badge>
                         {health?.online === true && (
                           <Badge variant="secondary" className="text-green-700 bg-green-100">
                             <CheckCircle className="w-3 h-3 mr-1" />
@@ -525,7 +524,7 @@ export default function ComfyuiSetting({
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>最大并发数</Label>
                 <Input
@@ -536,20 +535,6 @@ export default function ComfyuiSetting({
                     setInstanceForm((p) => ({
                       ...p,
                       max_concurrency: parseInt(e.target.value, 10) || 1,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>超时时间 (秒)</Label>
-                <Input
-                  type="number"
-                  min={30}
-                  value={instanceForm.timeout_sec}
-                  onChange={(e) =>
-                    setInstanceForm((p) => ({
-                      ...p,
-                      timeout_sec: parseInt(e.target.value, 10) || 600,
                     }))
                   }
                 />

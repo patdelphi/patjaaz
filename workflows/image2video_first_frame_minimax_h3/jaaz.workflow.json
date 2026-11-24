@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "name": "image2video_first_frame_minimax_h3",
+  "display_name": "MiniMax H3 单图首帧生视频",
+  "capability": "i2v",
+  "output_kind": "video",
+  "enabled": true,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用单张输入图片作为视频起始首帧，通过 MiniMax H3 FL2VA 生成带原生音频的延续动态视频（24 fps）。\n\n**必填参数：**\n- first_frame_image：必填，视频起始首帧图片文件名（使用 Jaaz 画布或用户上传的实际图片文件名）。\n- positive_prompt：必填，描述从首帧开始的动作演绎、镜头推移、光影变化与声音氛围。\n\n**可选参数：**\n- aspect_ratio：输出画幅比例，必须原样传完整枚举字符串，默认 \"9:16 (Portrait Widescreen)\"（与首帧比例匹配）。\n- megapixels：输出像素档，默认 0.98。\n- duration_seconds：视频时长（秒），默认 5.0。\n- enable_lightning_lora：是否开启 8 步 Turbo LoRA，默认 true（关闭可切至 20 步）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、8 步 Turbo LoRA、Qwen3VL-32B 与音视频双 VAE；仅接入 first_frame，末帧留空。",
+  "inputs": [
+    {
+      "name": "first_frame_image",
+      "type": "image",
+      "required": true,
+      "node_id": "114",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。作为视频第 1 帧的本地或画布图片文件名，禁止传入示例图名。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "105:104",
+      "node_input_name": "prompt",
+      "default_value": "",
+      "description": "必填。描述首帧之后的画面动作、场景演进、运镜节奏与音效。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "aspect_ratio",
+      "default_value": "9:16 (Portrait Widescreen)",
+      "description": "可选。输出画面比例，必须原样传 Allowed options 中的完整字符串之一（不可简写）；默认 \"9:16 (Portrait Widescreen)\"。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "megapixels",
+      "default_value": 0.98,
+      "description": "可选。输出分辨率像素档位（单位百万像素 MP），视频推荐 0.4–0.98，默认 0.98。"
+    },
+    {
+      "name": "duration_seconds",
+      "type": "number",
+      "required": false,
+      "node_id": "105:111",
+      "node_input_name": "value",
+      "default_value": 5.0,
+      "description": "可选。视频时长（秒），默认 5.0。"
+    },
+    {
+      "name": "enable_lightning_lora",
+      "type": "boolean",
+      "required": false,
+      "node_id": "105:126",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。true 开启 8 步 Turbo LoRA 加速，false 为 20 步标准采样；默认 true。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "单输入首尾帧生视频_MiniMax-H3.json",
+  "source_sha256": "9dab317dd6736975437d6c640e2a812e85cd1148752da2a6c81369313a683991"
+}

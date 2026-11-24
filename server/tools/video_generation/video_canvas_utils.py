@@ -249,7 +249,11 @@ async def generate_new_video_element(
             canvas = {"data": {}}
         canvas_data = canvas.get("data", {})
 
-    new_x, new_y = await find_next_best_element_position(canvas_data)
+    new_x, new_y = await find_next_best_element_position(
+        canvas_data,
+        target_width=int(video_data.get("width") or 640),
+        target_height=int(video_data.get("height") or 640),
+    )
 
     return {
         "type": "video",

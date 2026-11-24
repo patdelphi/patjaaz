@@ -3,7 +3,8 @@ from langgraph.prebuilt import create_react_agent  # type: ignore
 from langgraph.graph.graph import CompiledGraph
 from langchain_core.tools import BaseTool
 from models.tool_model import ToolInfoJson
-from services.langgraph_service.configs.image_vide_creator_config import ImageVideoCreatorAgentConfig
+from services.langgraph_service.capability_groups import group_tools_by_capability
+from services.langgraph_service.configs.image_vide_creator_config import CapabilityCreatorAgentConfig
 from .configs import PlannerAgentConfig, create_handoff_tool, BaseAgentConfig
 from services.tool_service import tool_service
 
@@ -30,34 +31,24 @@ class AgentManager:
         Returns:
             List[Any]: 创建好的智能体列表
         """
-        # 为不同类型的智能体过滤合适的工具
-        image_tools =  [tool for tool in tool_list if tool.get('type') == 'image']
-        video_tools = [tool for tool in tool_list if tool.get('type') == 'video']
+        # 按能力把工具分到 image / video / audio 分组，每组由独立智能体持有
+        grouped = group_tools_by_capability(tool_list)
+        group_names = list(grouped.keys())
+        for group_name, group_tools in grouped.items():
+            print(f"🧩 能力分组 {group_name}: {[t.get('id') for t in group_tools]}")
 
-        print(f"📸 图像工具: {image_tools}")
-        print(f"🎬 视频工具: {video_tools}")
-
-        planner_config = PlannerAgentConfig()
+        planner_config = PlannerAgentConfig(group_names, extra_prompt=system_prompt)
         planner_agent = AgentManager._create_langgraph_agent(
             model, planner_config)
 
-        # image_designer_config = ImageDesignerAgentConfig(
-        #     image_tools, system_prompt)
-        # print('👇image_designer_config tools', image_designer_config.tools)
-        # print('👇image_designer_config system_prompt', image_designer_config.system_prompt)
-        # image_designer_agent = AgentManager._create_langgraph_agent(
-        #     model, image_designer_config)
+        creator_agents: List[CompiledGraph] = []
+        for group_name, group_tools in grouped.items():
+            creator_config = CapabilityCreatorAgentConfig(
+                group_name, group_tools, group_names, extra_prompt=system_prompt)
+            creator_agents.append(
+                AgentManager._create_langgraph_agent(model, creator_config))
 
-        # video_designer_config = VideoDesignerAgentConfig(
-        #     video_tools)
-        # video_designer_agent = AgentManager._create_langgraph_agent(
-        #     model, video_designer_config)
-
-        image_video_creator_config = ImageVideoCreatorAgentConfig(tool_list)
-        image_video_creator_agent = AgentManager._create_langgraph_agent(
-            model, image_video_creator_config)
-
-        return [planner_agent, image_video_creator_agent]
+        return [planner_agent, *creator_agents]
 
     @staticmethod
     def _create_langgraph_agent(

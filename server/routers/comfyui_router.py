@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -15,15 +16,20 @@ from services.comfy_instance_service import (
     normalize_comfy_base_url,
 )
 from services.comfy_workflow_ai_importer import (
+    auto_import_new_source_workflows,
     fetch_comfy_object_info,
     generate_workflow_config_with_ai,
 )
 from services.comfy_workflow_pack import (
+    SOURCE_WORKFLOWS_DIR,
     WORKFLOWS_DIR,
     WorkflowPackValidationError,
     build_export_pack,
     generate_draft_config,
+    get_auto_import_source_enabled,
     save_pack_to_workflows_dir,
+    scan_source_workflows_dir,
+    set_auto_import_source_enabled,
     summarize_api_json_for_agent,
     sync_workflows_dir_to_db,
     update_pack_enabled_flag,
@@ -113,6 +119,17 @@ class UpdateWorkflowRequest(BaseModel):
 
 class ExportWorkflowRequest(BaseModel):
     save_to_dir: bool = False
+
+
+class SyncSourceRequest(BaseModel):
+    instance_id: Optional[str] = None
+    provider: Optional[str] = ""
+    model: Optional[str] = ""
+    fallback_to_draft: bool = False
+
+
+class SourceSettingsRequest(BaseModel):
+    auto_import_source: bool
 
 
 async def _sync_primary_comfy_url_to_config() -> None:
@@ -268,7 +285,7 @@ def _enrich_workflow_record(row: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.get("/workflows")
 async def list_workflows_rich(auto_sync: bool = True):
-    """列出全部 ComfyUI 工作流及其元数据和校验结果，默认自动同步项目 workflows/ 目录中的新文件对。"""
+    """列出全部 ComfyUI 工作流及其元数据和校验结果，并报告 workflows/source/ 中待导入的新文件。"""
     try:
         if auto_sync:
             sync_res = await sync_workflows_dir_to_db(
@@ -277,9 +294,17 @@ async def list_workflows_rich(auto_sync: bool = True):
             if sync_res.get("changed"):
                 await tool_service.initialize()
 
+        source_dir = os.path.join(WORKFLOWS_DIR, "source")
+        source_scan = scan_source_workflows_dir(
+            source_dir=source_dir, workflows_dir=WORKFLOWS_DIR
+        )
         rows = await db_service.list_comfy_workflows(enabled_only=False)
         return {
             "workflows_dir": WORKFLOWS_DIR,
+            "source_dir": source_scan["source_dir"],
+            "pending_source_files": list(source_scan.get("new", []))
+            + list(source_scan.get("updated", [])),
+            "invalid_source_files": source_scan.get("invalid", []),
             "workflows": [_enrich_workflow_record(r) for r in rows],
         }
     except HTTPException:
@@ -369,6 +394,54 @@ async def scan_project_workflows():
             "synced": sync_res["synced"],
             "errors": sync_res["errors"],
         }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/workflows/source_settings")
+async def get_source_settings():
+    """读取 workflows/source/ 自动导入开关（默认关闭）。"""
+    try:
+        return {"auto_import_source": get_auto_import_source_enabled()}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.put("/workflows/source_settings")
+async def update_source_settings(request: SourceSettingsRequest):
+    """手动开启或关闭服务启动时自动导入 workflows/source/（开启后会消耗已配置文本模型的 token）。"""
+    try:
+        enabled = set_auto_import_source_enabled(request.auto_import_source)
+        return {"auto_import_source": enabled}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/workflows/sync_source")
+async def sync_source_workflows(
+    request: SyncSourceRequest = SyncSourceRequest(),
+):
+    """检测并自动导入 workflows/source/ 中新增或变更的原始 ComfyUI API JSON 文件。"""
+    try:
+        source_dir = os.path.join(WORKFLOWS_DIR, "source")
+        res = await auto_import_new_source_workflows(
+            source_dir=source_dir,
+            workflows_dir=WORKFLOWS_DIR,
+            db=db_service,
+            instance_id=request.instance_id,
+            provider=request.provider or "",
+            model=request.model or "",
+            fallback_to_draft=request.fallback_to_draft,
+        )
+        if res.get("imported"):
+            await tool_service.initialize()
+        return res
     except HTTPException:
         raise
     except Exception as exc:

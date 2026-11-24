@@ -1,4 +1,5 @@
 """程序说明：管理并过滤后端可用工具注册表，仅注册系统必要工具与已启用的本地生成工作流。"""
+import asyncio
 import traceback
 from typing import Dict
 from langchain_core.tools import BaseTool
@@ -16,6 +17,8 @@ TOOL_MAPPING: Dict[str, ToolInfo] = {}
 class ToolService:
     def __init__(self):
         self.tools: Dict[str, ToolInfo] = {}
+        # 首轮 initialize 完成前接口应等待，避免启动窗口内返回空工具列表
+        self.ready = asyncio.Event()
         self._register_required_tools()
 
     def _register_required_tools(self):
@@ -36,7 +39,14 @@ class ToolService:
 
         self.tools[tool_id] = tool_info
 
-    # TODO: Check if there will be racing conditions when server just starting up but tools are not ready yet.
+    async def wait_until_ready(self, timeout: float = 5.0) -> bool:
+        """等待首轮工具注册完成；超时返回 False，调用方可继续使用当前注册表。"""
+        try:
+            await asyncio.wait_for(self.ready.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
     async def initialize(self):
         self.clear_tools()
         try:
@@ -58,6 +68,8 @@ class ToolService:
         except Exception as e:
             print(f"❌ Failed to initialize tool service: {e}")
             traceback.print_stack()
+        finally:
+            self.ready.set()
 
     def get_tool(self, tool_name: str) -> BaseTool | None:
         tool_info = self.tools.get(tool_name)

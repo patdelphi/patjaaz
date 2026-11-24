@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "name": "ref2video_minimax_h3_ref2va",
+  "display_name": "MiniMax H3 Ref2VA 参考生视频",
+  "capability": "i2v",
+  "output_kind": "video",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用 MiniMax H3 Ref2VA 专用参考模型，根据参考图中的角色/主体形象与场景提示词生成带音频视频（24 fps）。\n\n**必填参数：**\n- reference_image：必填，角色/物体/设定参考图文件名（工作流通过 ref_images.ref_image_0 条件引用，保留主体外观一致性）。\n- positive_prompt：必填，分镜脚本与动作描述，可说明如何使用参考图特征以及光影、运镜与音效。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传完整枚举值，默认 \"16:9 (Widescreen)\"。\n- megapixels：像素档，默认 0.98。\n- duration_seconds：视频时长（秒），默认 10.0。\n- enable_lightning_lora：是否启用 Ref2V 4 步 Turbo LoRA，默认 true（true=4 步，false=20 步）。\n\n**模型与备注：** 内置 minimax_h3_ref2va_pruned_int8_convrot 与 minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16。注意：当前导出的 API JSON 仅包含 1 路参考图节点 164，未暴露多帧时间索引参数。",
+  "inputs": [
+    {
+      "name": "reference_image",
+      "type": "image",
+      "required": true,
+      "node_id": "164",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。参考角色、物品或构图设定图对应的本地或画布图片文件名。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "138",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。详细动作、分镜、台词与参考图使用规则描述。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "aspect_ratio",
+      "default_value": "16:9 (Widescreen)",
+      "description": "可选。输出画面比例，必须原样传 Allowed options 中的完整字符串之一（不可简写）；默认 \"16:9 (Widescreen)\"。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "megapixels",
+      "default_value": 0.98,
+      "description": "可选。输出分辨率像素档位（单位百万像素 MP），视频推荐 0.4–0.98，默认 0.98。"
+    },
+    {
+      "name": "duration_seconds",
+      "type": "number",
+      "required": false,
+      "node_id": "132",
+      "node_input_name": "value",
+      "default_value": 10.0,
+      "description": "可选。生成视频时长（秒），默认 10.0。"
+    },
+    {
+      "name": "enable_lightning_lora",
+      "type": "boolean",
+      "required": false,
+      "node_id": "146",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。true 启用 Ref2V 4 步 Lightning LoRA，false 为 20 步完整采样；默认 true。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "多帧参考生视频_MiniMax-H3-Ref2VA.json",
+  "source_sha256": "ed2fea8cd200fabb8dd8c08fa22be016c4e57e50f402120afe0eb5c00e258d62"
+}

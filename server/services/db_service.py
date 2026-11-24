@@ -870,6 +870,43 @@ class DatabaseService:
         """读取指定任务记录。"""
         return await asyncio.to_thread(self._get_job_sync, job_id)
 
+    def _interrupt_stale_jobs_sync(self) -> int:
+        with self._sync_transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE jobs
+                SET status = 'interrupted',
+                    error = COALESCE(NULLIF(error, ''), 'Server restarted while the job was running'),
+                    finished_at = COALESCE(finished_at, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                WHERE status IN ('queued', 'running')
+                  AND (remote_prompt_id IS NULL OR remote_prompt_id = '')
+                """
+            )
+            return int(cur.rowcount or 0)
+
+    def _list_recoverable_jobs_sync(self) -> List[Dict[str, Any]]:
+        conn = self._open_sync_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT * FROM jobs
+                WHERE status IN ('queued', 'running')
+                  AND remote_prompt_id IS NOT NULL AND remote_prompt_id != ''
+                ORDER BY created_at ASC
+                """
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    async def list_recoverable_jobs(self) -> List[Dict[str, Any]]:
+        """列出重启时仍在远端执行、已知 prompt_id 的任务，供恢复流程接管。"""
+        return await asyncio.to_thread(self._list_recoverable_jobs_sync)
+
+    async def interrupt_stale_jobs(self) -> int:
+        """服务启动时把上次崩溃或重启遗留的 queued/running 任务标为 interrupted，返回处理条数。"""
+        return await asyncio.to_thread(self._interrupt_stale_jobs_sync)
+
 
 # 全局单例数据库服务
 db_service = DatabaseService()

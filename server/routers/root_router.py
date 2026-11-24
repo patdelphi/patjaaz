@@ -154,6 +154,7 @@ async def get_models() -> list[ModelInfo]:
 async def list_tools() -> list[ToolInfoJson]:
     """列出当前已配置的图像/视频/工作流生成工具。"""
     try:
+        await tool_service.wait_until_ready()
         config = config_service.get_config()
         return filter_available_tools(tool_service.tools, config)
     except HTTPException:

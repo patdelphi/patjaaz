@@ -19,11 +19,15 @@ if SERVER_DIR not in sys.path:
     sys.path.insert(0, SERVER_DIR)
 
 with contextlib.redirect_stdout(sys.stderr):
+    import asyncio
+    from services.comfy_workflow_ai_importer import auto_import_new_source_workflows
     from services.comfy_workflow_pack import (
         WORKFLOWS_DIR,
         WorkflowPackValidationError,
         build_export_pack,
+        compute_file_sha256,
         save_pack_to_workflows_dir,
+        scan_source_workflows_dir,
         summarize_api_json_for_agent,
         update_pack_enabled_flag,
         validate_workflow_pack,
@@ -108,8 +112,15 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 def _cmd_install(args: argparse.Namespace) -> int:
     api_json = _load_json_file(args.api_json)
     cfg_json = _load_json_file(args.config_json)
-    if args.disabled and isinstance(cfg_json, dict):
-        cfg_json["enabled"] = False
+    if isinstance(cfg_json, dict):
+        if args.disabled:
+            cfg_json["enabled"] = False
+        if args.source_file:
+            cfg_json["source_file"] = args.source_file
+        if args.source_sha256:
+            cfg_json["source_sha256"] = args.source_sha256
+        elif args.source_file and not cfg_json.get("source_sha256") and os.path.isfile(args.api_json):
+            cfg_json["source_sha256"] = compute_file_sha256(args.api_json)
 
     saved = save_pack_to_workflows_dir(
         api_json, cfg_json, workflows_dir=args.workflows_dir
@@ -242,6 +253,37 @@ def _cmd_export_all(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_check_source(args: argparse.Namespace) -> int:
+    """扫描 workflows/source/（或指定目录）并输出待导入/已导入/无效文件 JSON 报告。"""
+    source_dir = args.source_dir or os.path.join(args.workflows_dir, "source")
+    scan = scan_source_workflows_dir(
+        source_dir=source_dir, workflows_dir=args.workflows_dir
+    )
+    print(json.dumps(scan, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_sync_source(args: argparse.Namespace) -> int:
+    """调用内置 LLM 或草稿兜底，自动导入 workflows/source/ 中新增或变更的原始工作流。"""
+    source_dir = args.source_dir or os.path.join(args.workflows_dir, "source")
+    db = _open_db(args.db_path)
+    object_info = _fetch_object_info_sync(args.comfy_url) if args.comfy_url else None
+    with contextlib.redirect_stdout(sys.stderr):
+        res = asyncio.run(
+            auto_import_new_source_workflows(
+                source_dir=source_dir,
+                workflows_dir=args.workflows_dir,
+                db=db,
+                provider=args.provider or "",
+                model=args.model or "",
+                object_info=object_info,
+                fallback_to_draft=bool(args.fallback_draft),
+            )
+        )
+    print(json.dumps(res, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Jaaz ComfyUI 成对工作流 CLI 工具（支持 AI Agent 与命令行一键导入、校验和启停）"
@@ -273,6 +315,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_inst.add_argument("config_json", help="jaaz.workflow.json 文件路径")
     p_inst.add_argument("--disabled", action="store_true", help="导入后默认设为停用")
     p_inst.add_argument("--no-db", action="store_true", help="仅写入 workflows/ 目录不立即写库")
+    p_inst.add_argument("--source-file", default="", help="可选：记录 workflows/source/ 原始文件名")
+    p_inst.add_argument("--source-sha256", default="", help="可选：记录原始源文件 SHA-256")
     p_inst.set_defaults(func=_cmd_install)
 
     p_list = sub.add_parser("list", help="列出数据库中的全部工作流及启停状态")
@@ -288,6 +332,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_exp = sub.add_parser("export-all", help="将所有仅存于 DB 的历史工作流导出为标准 workflows/<name>/ 文件对")
     p_exp.set_defaults(func=_cmd_export_all)
+
+    p_chk = sub.add_parser("check-source", help="扫描 workflows/source/ 中新增、已导入或异常的原始工作流文件")
+    p_chk.add_argument("--source-dir", default="", help="可选原始工作流目录，默认为 <workflows_dir>/source")
+    p_chk.set_defaults(func=_cmd_check_source)
+
+    p_sync = sub.add_parser("sync-source", help="自动检测并导入 workflows/source/ 中新增的原始工作流")
+    p_sync.add_argument("--source-dir", default="", help="可选原始工作流目录，默认为 <workflows_dir>/source")
+    p_sync.add_argument("--comfy-url", default="", help="可选 ComfyUI 服务地址用于拉取 /object_info 枚举")
+    p_sync.add_argument("--provider", default="", help="可选文本大模型提供商")
+    p_sync.add_argument("--model", default="", help="可选文本大模型名称")
+    p_sync.add_argument("--fallback-draft", action="store_true", help="无可用 LLM 时退回生成停用状态草稿")
+    p_sync.set_defaults(func=_cmd_sync_source)
 
     return parser
 

@@ -106,6 +106,11 @@ export default function ComfuiWorkflowSetting({
   const refreshModels = useRefreshModels()
   const [workflows, setWorkflows] = useState<ComfyWorkflowRecord[]>([])
   const [workflowsDir, setWorkflowsDir] = useState<string>('workflows/')
+  const [pendingSourceFiles, setPendingSourceFiles] = useState<
+    Array<{ filename: string; path: string }>
+  >([])
+  const [syncingSource, setSyncingSource] = useState(false)
+  const [autoImportSource, setAutoImportSource] = useState(false)
   const [loading, setLoading] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [togglingId, setTogglingId] = useState<number | null>(null)
@@ -156,6 +161,9 @@ export default function ComfuiWorkflowSetting({
       const data = await resp.json()
       setWorkflowsDir(data.workflows_dir || 'workflows/')
       setWorkflows(Array.isArray(data.workflows) ? data.workflows : [])
+      setPendingSourceFiles(
+        Array.isArray(data.pending_source_files) ? data.pending_source_files : []
+      )
     } catch (err) {
       toast.error(
         `加载工作流列表失败: ${err instanceof Error ? err.message : String(err)}`
@@ -167,7 +175,34 @@ export default function ComfuiWorkflowSetting({
 
   useEffect(() => {
     loadWorkflows()
+    // 读取 workflows/source/ 自动导入开关（默认关闭）
+    fetch('/api/settings/comfyui/workflows/source_settings')
+      .then((resp) => (resp.ok ? resp.json() : null))
+      .then((data) => {
+        if (data && typeof data.auto_import_source === 'boolean') {
+          setAutoImportSource(data.auto_import_source)
+        }
+      })
+      .catch(() => undefined)
   }, [])
+
+  const handleToggleAutoImportSource = async (next: boolean) => {
+    setAutoImportSource(next)
+    try {
+      const resp = await fetch('/api/settings/comfyui/workflows/source_settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_import_source: next }),
+      })
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
+      }
+      toast.success(next ? '已开启启动时自动导入 workflows/source/' : '已关闭自动导入')
+    } catch (err) {
+      setAutoImportSource(!next)
+      toast.error(`保存失败: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 
   const handleToggleEnabled = async (wf: ComfyWorkflowRecord, nextEnabled: boolean) => {
     setTogglingId(wf.id)
@@ -226,6 +261,45 @@ export default function ComfuiWorkflowSetting({
       )
     } finally {
       setScanning(false)
+    }
+  }
+
+  const handleSyncSourceFiles = async () => {
+    setSyncingSource(true)
+    try {
+      const resp = await fetch('/api/settings/comfyui/workflows/sync_source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fallback_to_draft: false }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        throw new Error(data.detail || `HTTP ${resp.status}`)
+      }
+      await loadWorkflows()
+      refreshModels()
+      const importedCount = Array.isArray(data.imported) ? data.imported.length : 0
+      const skippedCount = Array.isArray(data.skipped_no_llm)
+        ? data.skipped_no_llm.length
+        : 0
+      const errCount = Array.isArray(data.errors) ? data.errors.length : 0
+      if (importedCount > 0) {
+        toast.success(`已从 workflows/source/ 自动导入 ${importedCount} 个新工作流`)
+      } else if (skippedCount > 0) {
+        toast.warning(
+          `检测到 ${skippedCount} 个待导入工作流，请先配置可用文本大模型，或由外部 AI Agent 执行 workflow_cli.py 导入`
+        )
+      } else if (errCount > 0) {
+        toast.error(`自动导入存在 ${errCount} 个失败项`)
+      } else {
+        toast.info('workflows/source/ 中没有需要导入的新文件')
+      }
+    } catch (err) {
+      toast.error(
+        `自动导入 workflows/source/ 失败: ${err instanceof Error ? err.message : String(err)}`
+      )
+    } finally {
+      setSyncingSource(false)
     }
   }
 
@@ -587,6 +661,41 @@ export default function ComfuiWorkflowSetting({
           </Button>
         </div>
       </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs">
+        <div className="text-muted-foreground">
+          启动时自动导入 <code className="px-1 py-0.5 rounded bg-muted">workflows/source/</code> 中的新文件（调用已配置文本模型，会消耗 token；默认关闭）
+        </div>
+        <Switch
+          checked={autoImportSource}
+          onCheckedChange={handleToggleAutoImportSource}
+        />
+      </div>
+
+      {pendingSourceFiles.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-xs">
+          <div className="text-foreground">
+            检测到 <code className="px-1 py-0.5 rounded bg-muted">workflows/source/</code> 中有{' '}
+            <strong>{pendingSourceFiles.length}</strong> 个待导入的原始工作流（
+            {pendingSourceFiles
+              .slice(0, 3)
+              .map((item) => item.filename)
+              .join('、')}
+            {pendingSourceFiles.length > 3 ? ' 等' : ''}）。
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleSyncSourceFiles}
+            disabled={syncingSource}
+          >
+            <Sparkles
+              className={`w-3.5 h-3.5 mr-1 ${syncingSource ? 'animate-spin' : ''}`}
+            />
+            {syncingSource ? '导入中...' : 'AI 自动导入新文件'}
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-sm text-muted-foreground py-6 text-center">

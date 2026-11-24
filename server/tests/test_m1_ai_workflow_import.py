@@ -17,14 +17,28 @@ if SERVER_DIR not in sys.path:
 from routers import comfyui_router
 from services import tool_service as tool_service_mod
 from services.comfy_workflow_ai_importer import (
+    auto_import_new_source_workflows,
     extract_json_from_llm_text,
     generate_workflow_config_with_ai,
 )
 from services.comfy_workflow_pack import (
+    WORKFLOWS_DIR,
+    compute_file_sha256,
+    repair_missing_primitive_nodes,
+    scan_source_workflows_dir,
+    scan_workflows_dir,
     summarize_api_json_for_agent,
     sync_workflows_dir_to_db,
+    validate_api_json,
+    validate_workflow_pack,
 )
 from services.db_service import DatabaseService
+from tools.comfy_dynamic import (
+    apply_workflow_inputs_and_seeds,
+    build_tool,
+    resolve_comfy_input_media_path,
+)
+from utils.path_security import PathSecurityError
 
 
 SAMPLE_MOSS_LIKE_API = {
@@ -299,6 +313,194 @@ class M1AiWorkflowImportAsyncTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(names["agent_added_wf"]["source_mode"], "pack_dir")
             self.assertIn("comfyui_agent_added_wf", tool_service_mod.tool_service.get_all_tools())
             tool_service_mod.tool_service.clear_tools()
+
+    async def test_source_dir_ignored_by_pack_scan_and_tracked_across_lifecycle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wf_dir = os.path.join(tmp, "workflows")
+            src_dir = os.path.join(wf_dir, "source")
+            os.makedirs(src_dir, exist_ok=True)
+
+            # 1. 即使 workflows/source/ 里含原始 API JSON 与 .index.json，scan_workflows_dir 也必须忽略不报错
+            raw_broken_primitive = {
+                "10": {"class_type": "CLIPTextEncode", "inputs": {"text": ["7", 0]}},
+                "7": {"inputs": {"UNKNOWN": "hello"}},
+                "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x", "images": ["10", 0]}},
+            }
+            # 确认未修复时 validate_api_json 拦截坏节点
+            self.assertTrue(validate_api_json(raw_broken_primitive))
+
+            repaired, notes = repair_missing_primitive_nodes(raw_broken_primitive)
+            self.assertEqual(repaired["7"]["class_type"], "PrimitiveStringMultiline")
+            self.assertEqual(validate_api_json(repaired), [])
+            self.assertTrue(notes)
+
+            src_file = os.path.join(src_dir, "demo_source.json")
+            with open(src_file, "w", encoding="utf-8") as f:
+                json.dump(raw_broken_primitive, f)
+            with open(os.path.join(src_dir, ".index.json"), "w", encoding="utf-8") as f:
+                f.write("{}")
+            with open(os.path.join(src_dir, "ui_graph.json"), "w", encoding="utf-8") as f:
+                json.dump({"last_node_id": 2, "nodes": [{"id": 1}], "links": []}, f)
+
+            pack_scan = scan_workflows_dir(wf_dir)
+            self.assertEqual(pack_scan["errors"], [])
+
+            # 2. scan_source_workflows_dir 识别 new / invalid 并忽略 .index.json
+            src_scan = scan_source_workflows_dir(source_dir=src_dir, workflows_dir=wf_dir)
+            self.assertEqual([i["filename"] for i in src_scan["new"]], ["demo_source.json"])
+            self.assertEqual([i["filename"] for i in src_scan["invalid"]], ["ui_graph.json"])
+
+            # 3. 无可用 LLM 时优雅跳过，不抛错
+            db = DatabaseService(db_path=os.path.join(tmp, "auto_src.db"))
+            with patch(
+                "services.comfy_workflow_ai_importer.select_available_text_model",
+                side_effect=RuntimeError("未配置文本大模型"),
+            ):
+                skip_res = await auto_import_new_source_workflows(
+                    source_dir=src_dir, workflows_dir=wf_dir, db=db
+                )
+            self.assertEqual(skip_res["imported"], [])
+            self.assertEqual(skip_res["skipped_no_llm"], ["demo_source.json"])
+
+            # 4. 注入 Mock LLM 后自动修复导入、落盘与入库，且二次运行幂等不重复导入
+            mock_cfg = {
+                "schema_version": 1,
+                "name": "auto_repaired_demo",
+                "display_name": "自动修复测试工作流",
+                "capability": "t2i",
+                "output_kind": "image",
+                "enabled": True,
+                "description": "自动修复并导入的测试工作流",
+                "inputs": [
+                    {
+                        "name": "positive_prompt",
+                        "type": "string",
+                        "required": True,
+                        "node_id": "7",
+                        "node_input_name": "value",
+                        "default_value": "",
+                        "description": "正向提示词",
+                    }
+                ],
+            }
+            fake_chat = AsyncMock()
+            fake_chat.ainvoke = AsyncMock(
+                return_value=AIMessage(content=json.dumps(mock_cfg))
+            )
+            imp_res = await auto_import_new_source_workflows(
+                source_dir=src_dir,
+                workflows_dir=wf_dir,
+                db=db,
+                chat_model=fake_chat,
+                object_info={},
+            )
+            self.assertEqual(len(imp_res["imported"]), 1)
+            self.assertEqual(imp_res["imported"][0]["name"], "auto_repaired_demo")
+
+            second_res = await auto_import_new_source_workflows(
+                source_dir=src_dir,
+                workflows_dir=wf_dir,
+                db=db,
+                chat_model=fake_chat,
+                object_info={},
+            )
+            self.assertEqual(second_res["imported"], [])
+            self.assertEqual(len(second_res["already_imported"]), 1)
+
+            # 5. 修改源文件后应识别为 updated
+            with open(src_file, "w", encoding="utf-8") as f:
+                raw_broken_primitive["7"]["inputs"]["UNKNOWN"] = "updated hello"
+                json.dump(raw_broken_primitive, f)
+            upd_scan = scan_source_workflows_dir(source_dir=src_dir, workflows_dir=wf_dir)
+            self.assertEqual([i["filename"] for i in upd_scan["updated"]], ["demo_source.json"])
+
+    def test_optional_media_node_pruning_and_video_audio_resolution(self):
+        # 测试视频/音频路径解析及防越界
+        with tempfile.TemporaryDirectory() as files_dir:
+            vid = os.path.join(files_dir, "clip_1.mp4")
+            aud = os.path.join(files_dir, "voice_1.wav")
+            with open(vid, "wb") as f:
+                f.write(b"fake-mp4")
+            with open(aud, "wb") as f:
+                f.write(b"fake-wav")
+
+            self.assertEqual(
+                resolve_comfy_input_media_path("clip_1.mp4", files_dir, "video"), vid
+            )
+            self.assertEqual(
+                resolve_comfy_input_media_path("/api/file/voice_1.wav", files_dir, "audio"),
+                aud,
+            )
+            self.assertIsNone(
+                resolve_comfy_input_media_path("None", files_dir, "audio")
+            )
+            with self.assertRaises(PathSecurityError):
+                resolve_comfy_input_media_path("../escape.mp4", files_dir, "video")
+
+        # 测试未传可选 LoadImage/LoadAudio 时自动裁剪下游连线和加载节点
+        wf_api = {
+            "10": {"class_type": "LoadImage", "inputs": {"image": "req.png"}},
+            "11": {"class_type": "LoadImage", "inputs": {"image": "None"}},
+            "16": {"class_type": "LoadAudio", "inputs": {"audio": "None"}},
+            "26": {
+                "class_type": "MiniMaxH3ReferenceToVideo",
+                "inputs": {
+                    "prompt": "run",
+                    "ref_images.ref_image_0": ["10", 0],
+                    "ref_images.ref_image_1": ["11", 0],
+                    "ref_audios.ref_audio_0": ["16", 0],
+                },
+            },
+        }
+        input_defs = [
+            {"name": "ref1", "type": "image", "required": True, "node_id": "10", "node_input_name": "image"},
+            {"name": "ref2", "type": "image", "required": False, "node_id": "11", "node_input_name": "image"},
+            {"name": "aud1", "type": "audio", "required": False, "node_id": "16", "node_input_name": "audio"},
+        ]
+        pruned = apply_workflow_inputs_and_seeds(
+            wf_api, input_defs, {"ref1": "jaaz/real.png", "ref2": "", "aud1": None}
+        )
+        self.assertEqual(pruned["10"]["inputs"]["image"], "jaaz/real.png")
+        self.assertNotIn("11", pruned)
+        self.assertNotIn("16", pruned)
+        self.assertIn("ref_images.ref_image_0", pruned["26"]["inputs"])
+        self.assertNotIn("ref_images.ref_image_1", pruned["26"]["inputs"])
+        self.assertNotIn("ref_audios.ref_audio_0", pruned["26"]["inputs"])
+
+    def test_repo_installed_workflow_packs_validate_and_build_tools(self):
+        scan = scan_workflows_dir(WORKFLOWS_DIR)
+        self.assertEqual(scan["errors"], [])
+        self.assertGreaterEqual(len(scan["valid"]), 10)
+        for pack in scan["valid"]:
+            cfg = pack["config_json"]
+            val = validate_workflow_pack(pack["api_json"], cfg)
+            self.assertTrue(val["valid"], f"{cfg['name']} failed validation: {val['errors']}")
+            tool_obj = build_tool(
+                {
+                    "id": 100,
+                    "name": cfg["name"],
+                    "description": cfg["description"],
+                    "inputs": cfg["inputs"],
+                    "capability": cfg["capability"],
+                    "output_kind": cfg["output_kind"],
+                    "seed_strategy": cfg["seed_strategy"],
+                    "instance_id": cfg.get("instance_id") or None,
+                }
+            )
+            self.assertEqual(tool_obj.name, cfg["name"])
+
+        cli_path = os.path.join(SERVER_DIR, "scripts", "workflow_cli.py")
+        r_chk = subprocess.run(
+            [sys.executable, cli_path, "check-source"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(r_chk.returncode, 0, r_chk.stderr)
+        payload = json.loads(r_chk.stdout)
+        self.assertEqual(payload["new"], [])
+        self.assertEqual(payload["invalid"], [])
+        self.assertGreaterEqual(len(payload["already_imported"]), 10)
 
 
 if __name__ == "__main__":

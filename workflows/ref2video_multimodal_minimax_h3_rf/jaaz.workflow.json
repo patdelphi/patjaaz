@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "name": "ref2video_multimodal_minimax_h3_rf",
+  "display_name": "MiniMax H3 多图音频参考生视频 (RF加速)",
+  "capability": "i2v",
+  "output_kind": "video",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** MiniMax H3 多模态参考生视频工作流（RF + EasyCache + SageAttention 加速路径），支持 1–5 张参考图片与 0–3 段参考音频（人声/节奏/环境音）共同引导视频生成。\n\n**必填参数：**\n- reference_image_1：必填，主参考图（节点 10），输出分辨率按此图等比缩放计算。\n- positive_prompt：必填，视频画面内容、动作、镜头与音画配合描述（节点 34）。\n\n**可选参数：**\n- reference_image_2 ~ reference_image_5：可选第 2–5 张参考图（未传或留空时自动在运行期裁剪对应 LoadImage 节点）。\n- reference_audio_1 ~ reference_audio_3：可选第 1–3 段参考音频文件名（如 `.wav` / `.mp3`；未传或留空时自动裁剪 LoadAudio 节点）。\n- duration_seconds：视频时长（秒），默认 15。\n- max_size：基于首图等比缩放的最大宽高基准（像素），默认 1024（32 倍数对齐）。\n- fps：输出视频帧率，默认 24。\n\n**依赖与修复备注：** 导入时已将原文件中缺失 class_type 的整数原语节点 7/8/9 修复为合法 PrimitiveInt；固定 EasyCache + 25 步 res_multistep，依赖 ComfyUI 插件 `ComfyUI-KJNodes` 与 `ComfyUI-QualityOfLifeSuit_Omar92`。\n\n**填写顺序：** 参考图与参考音频请各自按顺序填写（先 reference_image_2 再 3、4、5；先 reference_audio_1 再 2、3），不要跳号。",
+  "inputs": [
+    {
+      "name": "reference_image_1",
+      "type": "image",
+      "required": true,
+      "node_id": "10",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。主参考图文件名（同时决定输出画幅比例）。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "34",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。描述参考图主体的动作、表情、运镜与音频同步要求。"
+    },
+    {
+      "name": "reference_image_2",
+      "type": "image",
+      "required": false,
+      "node_id": "11",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 2 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "reference_image_3",
+      "type": "image",
+      "required": false,
+      "node_id": "12",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 3 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "reference_image_4",
+      "type": "image",
+      "required": false,
+      "node_id": "13",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 4 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "reference_image_5",
+      "type": "image",
+      "required": false,
+      "node_id": "14",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 5 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "reference_audio_1",
+      "type": "audio",
+      "required": false,
+      "node_id": "16",
+      "node_input_name": "audio",
+      "default_value": "",
+      "description": "可选。第 1 段参考音频文件名（.wav/.mp3 等）；不用请留空。"
+    },
+    {
+      "name": "reference_audio_2",
+      "type": "audio",
+      "required": false,
+      "node_id": "17",
+      "node_input_name": "audio",
+      "default_value": "",
+      "description": "可选。第 2 段参考音频文件名；不用请留空。"
+    },
+    {
+      "name": "reference_audio_3",
+      "type": "audio",
+      "required": false,
+      "node_id": "18",
+      "node_input_name": "audio",
+      "default_value": "",
+      "description": "可选。第 3 段参考音频文件名；不用请留空。"
+    },
+    {
+      "name": "duration_seconds",
+      "type": "number",
+      "required": false,
+      "node_id": "7",
+      "node_input_name": "value",
+      "default_value": 15,
+      "description": "可选。视频时长（秒），整数，默认 15。"
+    },
+    {
+      "name": "max_size",
+      "type": "number",
+      "required": false,
+      "node_id": "9",
+      "node_input_name": "value",
+      "default_value": 1024,
+      "description": "可选。参考首图等比缩放基准尺寸（像素），整数，默认 1024。"
+    },
+    {
+      "name": "fps",
+      "type": "number",
+      "required": false,
+      "node_id": "8",
+      "node_input_name": "value",
+      "default_value": 24,
+      "description": "可选。输出帧率，整数，默认 24。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "多图音频参考生视频_MiniMax-H3_RF加速版.json",
+  "source_sha256": "4440fc11fdfa32c1349cb6442268cb91cba453d2a56047e52dd8fbac6a733ff3"
+}

@@ -1,14 +1,15 @@
 import { createCanvas } from '@/api/canvas'
 import ChatTextarea from '@/components/chat/ChatTextarea'
 import CanvasList from '@/components/home/CanvasList'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useConfigs } from '@/contexts/configs'
 import { DEFAULT_SYSTEM_PROMPT } from '@/constants'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Plus } from 'lucide-react'
 import { motion } from 'motion/react'
 import { nanoid } from 'nanoid'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import TopMenu from '@/components/TopMenu'
@@ -20,18 +21,21 @@ export const Route = createFileRoute('/')({
 function Home() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { setInitCanvas } = useConfigs()
+  const { setInitCanvas, textModel, selectedTools } = useConfigs()
 
   const { mutate: createCanvasMutation, isPending } = useMutation({
     mutationFn: createCanvas,
     onSuccess: (data, variables) => {
-      setInitCanvas(true)
+      const hasInitialPrompt = variables.messages.length > 0
+      setInitCanvas(hasInitialPrompt)
       navigate({
         to: '/canvas/$id',
         params: { id: data.id },
-        search: {
-          sessionId: variables.session_id,
-        },
+        search: hasInitialPrompt
+          ? {
+              sessionId: variables.session_id,
+            }
+          : undefined,
       })
     },
     onError: (error) => {
@@ -78,6 +82,30 @@ function Home() {
             }}
             pending={isPending}
           />
+          <Button
+            variant='outline'
+            size='sm'
+            className='mt-3 gap-1.5 text-muted-foreground hover:text-foreground'
+            disabled={isPending}
+            onClick={() => {
+              createCanvasMutation({
+                name: t('home:newCanvas'),
+                canvas_id: nanoid(),
+                messages: [],
+                session_id: nanoid(),
+                text_model: {
+                  provider: textModel?.provider || '',
+                  model: textModel?.model || '',
+                  url: textModel?.url || '',
+                },
+                tool_list: selectedTools || [],
+                system_prompt: localStorage.getItem('system_prompt') || DEFAULT_SYSTEM_PROMPT,
+              })
+            }}
+          >
+            <Plus className='size-4' />
+            {t('home:createBlankCanvas')}
+          </Button>
         </div>
 
         <CanvasList />
