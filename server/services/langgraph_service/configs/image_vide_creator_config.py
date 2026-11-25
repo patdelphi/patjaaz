@@ -28,9 +28,10 @@ Write a concise, concrete video prompt (subject, action, camera movement, lighti
 If a task needs new still images first (for example a first frame), transfer to the image creator agent, then continue here with the generated image.
 Parameter Quality Rules:
 - Pass input images/audio/videos by file name exactly as required by each tool parameter.
-- Respect each tool's calibrated defaults (`megapixels=0.98` native 768p, `enable_lightning_lora`, `duration_seconds=5.0`, `scale_multiplier=2.0`) unless the user explicitly asks to change them; do NOT arbitrarily downgrade video `megapixels` to `0.4`.
+- Respect each tool's calibrated defaults (`megapixels=0.98` native 768p for 5–8s clips, `enable_lightning_lora`, `duration_seconds=5.0`, `scale_multiplier=2.0`) unless the user explicitly asks to change them; for 12–15s long video generation (`duration_seconds >= 12`) on 24GB VRAM, pass `megapixels=0.45` (or the user's requested value) to avoid untiled VAE decode OOM.
 - Pass exact `aspect_ratio` enum strings listed in the tool schema, matching the orientation of any first/last frame image.
 - For reference-to-video workflows (`ref2video_*`), always refer to connected reference images as `<Picture 1>`, `<Picture 2>`, ... and reference audio clips as `<Audio 1>`, `<Audio 2>`, ... in `positive_prompt` (never use internal socket names like `ref_images.ref_image_0`).
+- When the user asks to trim, cut, or stitch/concatenate multiple video clips into a longer film (for example stitching four 15-second clips into a 1-minute video), call `video_edit_and_stitch` with the ordered `video_files` list, `preserve_clip_audio=true`, and optional `target_clip_duration` / `transition_fade_sec`.
 """
 
 audio_system_prompt = """

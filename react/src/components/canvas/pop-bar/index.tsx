@@ -24,6 +24,7 @@ const CanvasPopbarWrapper = () => {
   const [showBlockArrow, setShowBlockArrow] = useState(false)
 
   const selectedImagesRef = useRef<TCanvasAddImagesToChatEvent>([])
+  const selectedImageElementsRef = useRef<ExcalidrawImageElement[]>([])
   const selectedTextsRef = useRef<string[]>([])
   const selectedTextElementsRef = useRef<OrderedExcalidrawElement[]>([])
   const selectedStrokeElementsRef = useRef<ExcalidrawElement[]>([])
@@ -54,6 +55,7 @@ const CanvasPopbarWrapper = () => {
       (element) => selectedIds[element.id] && isBlockArrowElement(element)
     )
 
+    selectedImageElementsRef.current = selectedImages
     selectedTextElementsRef.current = selectedTextElements
     selectedStrokeElementsRef.current = selectedStrokeElements
     selectedBlockArrowsRef.current = selectedBlockArrows
@@ -130,6 +132,7 @@ const CanvasPopbarWrapper = () => {
             <CanvasPopbarContainer
               pos={pos}
               selectedImages={selectedImagesRef.current}
+              selectedImageElements={selectedImageElementsRef.current}
               selectedTexts={selectedTextsRef.current}
               selectedTextElements={selectedTextElementsRef.current}
               selectedStrokeElements={selectedStrokeElementsRef.current}

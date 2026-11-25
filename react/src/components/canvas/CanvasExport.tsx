@@ -1,10 +1,15 @@
 /** 程序说明：画布顶部导出按钮组，支持选中图片/视频/音频原始文件打包下载，以及整张画布或选区导出为合成视频封面帧的 PNG/SVG。 */
 import { useCanvas } from '@/contexts/canvas'
 import { buildExportableSceneWithVideoPosters } from '@/lib/canvasExportComposite'
+import {
+  buildPdfFromJpegPages,
+  collectElementsForFrame,
+  FrameExportFormat,
+} from '@/lib/canvasFrameExport'
 import { extractApiFilename, isAudioUrl } from '@/lib/canvasMediaNormalize'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
-import { ChevronDown, FileCode2, FileImage, ImageDown } from 'lucide-react'
+import { ChevronDown, FileCode2, FileImage, FileText, FolderDown, ImageDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '../ui/button'
@@ -204,6 +209,104 @@ const CanvasExport = () => {
     }
   }
 
+  // 按 Frame 分镜框批量多格式倍率导出（PNG/JPG/WebP 1x/2x）与多页 PDF 导出（X1）
+  const handleExportFramesBatch = async (
+    format: FrameExportFormat | 'pdf',
+    scale: 1 | 2 = 2
+  ) => {
+    if (!excalidrawAPI) return
+    const toastId = toast.loading('正在按分镜框渲染导出…')
+    try {
+      const appState = excalidrawAPI.getAppState()
+      const active = excalidrawAPI.getSceneElements().filter((el) => !el.isDeleted)
+      if (active.length === 0) {
+        toast.error(t('canvas:messages.nothingSelected'))
+        return
+      }
+      const frames = active.filter((el) => el.type === 'frame')
+      const frameGroups =
+        frames.length > 0
+          ? frames.map((f, idx) => ({
+              name: (f.name || `Frame-${idx + 1}`).replace(/[\\/:*?"<>|]/g, '_'),
+              items: collectElementsForFrame(f, active),
+            }))
+          : [{ name: 'Canvas-Full', items: active }]
+
+      const excalidrawModule = await import('@excalidraw/excalidraw')
+      const files = excalidrawAPI.getFiles()
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+
+      if (format === 'pdf') {
+        const pdfPages: { jpegBytes: Uint8Array; widthPx: number; heightPx: number }[] = []
+        for (const grp of frameGroups) {
+          const composite = await buildExportableSceneWithVideoPosters(grp.items, files)
+          const cv = await excalidrawModule.exportToCanvas({
+            elements: composite.elements,
+            appState: { ...appState, exportBackground: true, exportWithDarkMode: false },
+            files: composite.files,
+            getDimensions: (w: number, h: number) => ({ width: w * scale, height: h * scale, scale }),
+          })
+          const jpgBlob = await new Promise<Blob | null>((res) =>
+            cv.toBlob(res, 'image/jpeg', 0.92)
+          )
+          if (jpgBlob) {
+            const buf = new Uint8Array(await jpgBlob.arrayBuffer())
+            pdfPages.push({ jpegBytes: buf, widthPx: cv.width, heightPx: cv.height })
+          }
+        }
+        const pdfBytes = buildPdfFromJpegPages(pdfPages)
+        saveAs(
+          new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }),
+          `Storyboard-${stamp}.pdf`
+        )
+        toast.success('已导出分镜 PDF')
+        return
+      }
+
+      const mime = `image/${format}`
+      const ext = format === 'jpeg' ? 'jpg' : format
+      if (frameGroups.length === 1) {
+        const composite = await buildExportableSceneWithVideoPosters(frameGroups[0].items, files)
+        const cv = await excalidrawModule.exportToCanvas({
+          elements: composite.elements,
+          appState: { ...appState, exportBackground: true, exportWithDarkMode: false },
+          files: composite.files,
+          getDimensions: (w: number, h: number) => ({ width: w * scale, height: h * scale, scale }),
+        })
+        const outBlob = await new Promise<Blob | null>((res) => cv.toBlob(res, mime, 0.92))
+        if (outBlob) {
+          saveAs(outBlob, `${frameGroups[0].name}-${scale}x.${ext}`)
+        }
+        toast.success('导出完成')
+        return
+      }
+
+      const zip = new JSZip()
+      for (let i = 0; i < frameGroups.length; i++) {
+        const grp = frameGroups[i]
+        const composite = await buildExportableSceneWithVideoPosters(grp.items, files)
+        const cv = await excalidrawModule.exportToCanvas({
+          elements: composite.elements,
+          appState: { ...appState, exportBackground: true, exportWithDarkMode: false },
+          files: composite.files,
+          getDimensions: (w: number, h: number) => ({ width: w * scale, height: h * scale, scale }),
+        })
+        const outBlob = await new Promise<Blob | null>((res) => cv.toBlob(res, mime, 0.92))
+        if (outBlob) {
+          zip.file(`${String(i + 1).padStart(2, '0')}-${grp.name}-${scale}x.${ext}`, outBlob)
+        }
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      saveAs(zipBlob, `Frames-${scale}x-${stamp}.zip`)
+      toast.success(`已按 ${frameGroups.length} 个分镜框打包导出`)
+    } catch (err) {
+      console.error('Failed to batch export frames:', err)
+      toast.error(t('canvas:messages.failedToExportImages'), { id: toastId })
+    } finally {
+      toast.dismiss(toastId)
+    }
+  }
+
   return (
     <div className="inline-flex -space-x-px rounded-md shadow-xs rtl:space-x-reverse">
       <Button
@@ -237,6 +340,23 @@ const CanvasExport = () => {
           <DropdownMenuItem onClick={() => void handleExportWholeCanvas('svg')}>
             <FileCode2 className="mr-2 size-4" aria-hidden="true" />
             {t('canvas:exportCanvasSvg', { defaultValue: '导出画布为 SVG（含视频封面）' })}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => void handleExportFramesBatch('png', 2)}>
+            <FolderDown className="mr-2 size-4" aria-hidden="true" />
+            <span>按 Frame 分镜批量导出 PNG (2×)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleExportFramesBatch('webp', 2)}>
+            <FolderDown className="mr-2 size-4" aria-hidden="true" />
+            <span>按 Frame 分镜批量导出 WebP (2×)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleExportFramesBatch('jpeg', 2)}>
+            <FolderDown className="mr-2 size-4" aria-hidden="true" />
+            <span>按 Frame 分镜批量导出 JPG (2×)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleExportFramesBatch('pdf', 2)}>
+            <FileText className="mr-2 size-4" aria-hidden="true" />
+            <span>按 Frame 分镜导出多页 PDF</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

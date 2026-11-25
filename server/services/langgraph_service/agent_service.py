@@ -1,8 +1,11 @@
 from models.tool_model import ToolInfoJson
+from utils.log_sanitizer import get_sanitized_logger
+_logger = get_sanitized_logger(__name__)
 from services.db_service import db_service
 from .StreamProcessor import StreamProcessor
 from .agent_manager import AgentManager
 from .canvas_context import build_canvas_scene_context
+from .context_compactor import compact_chat_history
 import traceback
 from utils.http_client import HttpClient
 from langgraph_swarm import create_swarm  # type: ignore
@@ -94,8 +97,8 @@ async def langgraph_multi_agent(
         system_prompt: 系统提示词
     """
     try:
-        # 0. 修复消息历史
-        fixed_messages = _fix_chat_history(messages)
+        # 0. 修复不完整工具调用并对超长早期历史做无损滑窗折叠（A9）
+        fixed_messages = compact_chat_history(_fix_chat_history(messages))
 
         # 2. 文本模型与画布实时上下文摘要
         text_model_instance = _create_text_model(text_model)
@@ -107,8 +110,7 @@ async def langgraph_multi_agent(
                     (canvas_record or {}).get("data") if isinstance(canvas_record, dict) else None
                 )
             except Exception as canvas_exc:
-                print(f"[agent_service] Warning reading canvas context: {canvas_exc}")
-
+                _logger.info(f"[agent_service] Warning reading canvas context: {canvas_exc}")
         combined_system_prompt = "\n\n".join(
             p for p in (system_prompt or "", canvas_scene_prompt) if p.strip()
         )
@@ -120,12 +122,11 @@ async def langgraph_multi_agent(
             combined_system_prompt,
         )
         agent_names = [agent.name for agent in agents]
-        print('👇agent_names', agent_names)
+        _logger.info('👇agent_names', agent_names)
         last_agent = AgentManager.get_last_active_agent(
             fixed_messages, agent_names)
 
-        print('👇last_agent', last_agent)
-
+        _logger.info('👇last_agent', last_agent)
         # 4. 创建智能体群组
         swarm = create_swarm(
             agents=agents,  # type: ignore
@@ -155,9 +156,9 @@ def _create_text_model(text_model: ModelInfo) -> Any:
 
 async def _handle_error(error: Exception, session_id: str) -> None:
     """处理错误"""
-    print('Error in langgraph_agent', error)
+    _logger.info('Error in langgraph_agent', error)
     tb_str = traceback.format_exc()
-    print(f"Full traceback:\n{tb_str}")
+    _logger.info(f"Full traceback:\n{tb_str}")
     traceback.print_exc()
 
     message = str(error)

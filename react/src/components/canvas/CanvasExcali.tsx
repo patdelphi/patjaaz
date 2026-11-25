@@ -1,6 +1,11 @@
-import { getCanvas, saveCanvas } from '@/api/canvas'
+import { applyCanvasOps, getCanvas, saveCanvas } from '@/api/canvas'
 import { recomputeResizedBlockArrows } from '@/lib/blockArrow'
 import { externalizeInlineCanvasImages } from '@/lib/canvasBase64Externalizer'
+import {
+  buildElementDigestMap,
+  diffCanvasElementsToOps,
+  ElementVersionDigest,
+} from '@/lib/canvasIncrementalSync'
 import { findNewPersistableImageIds, getPersistableImageIds } from '@/lib/canvasImagePersistence'
 import {
   computeSceneVersionKey,
@@ -68,6 +73,16 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       (initialData?.elements ?? []) as ReadonlyArray<OrderedExcalidrawElement>
     )
   )
+  const prevElementDigestRef = useRef<ElementVersionDigest>(
+    buildElementDigestMap(
+      (initialData?.elements ?? []) as unknown as ReadonlyArray<{
+        id: string
+        version?: number
+        versionNonce?: number
+        isDeleted?: boolean
+      }>
+    )
+  )
 
   const { i18n, t } = useTranslation()
 
@@ -130,11 +145,39 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       }
 
       const thumbnail = pickCanvasThumbnailUrl(elements, effectiveFiles)
+      const diffResult = diffCanvasElementsToOps(
+        prevElementDigestRef.current,
+        elements as unknown as ReadonlyArray<{
+          id: string
+          version?: number
+          versionNonce?: number
+          isDeleted?: boolean
+        }>
+      )
 
       try {
-        await queueCanvasSave(canvasId, () =>
-          saveCanvas(canvasId, { data, thumbnail })
-        )
+        await queueCanvasSave(canvasId, async () => {
+          if (diffResult.shouldUseIncremental && externalized.updatedEntries.length === 0) {
+            try {
+              await applyCanvasOps(canvasId, {
+                ops: diffResult.ops,
+                files: effectiveFiles,
+                appState: {
+                  scrollX: appState.scrollX,
+                  scrollY: appState.scrollY,
+                  viewBackgroundColor: appState.viewBackgroundColor,
+                },
+                thumbnail,
+              })
+              prevElementDigestRef.current = diffResult.nextDigest
+              return
+            } catch {
+              // 增量通道异常时无缝回退整包保存
+            }
+          }
+          await saveCanvas(canvasId, { data, thumbnail })
+          prevElementDigestRef.current = diffResult.nextDigest
+        })
         saveErrorShownRef.current = false
       } catch (error) {
         console.error('Failed to save canvas ' + canvasId, error)
@@ -590,18 +633,53 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
     [addAudioEmbed, canvasId]
   )
 
+  const handleCanvasElementsUpdated = useCallback(
+    (payload: ISocket.SessionCanvasElementsUpdatedEvent) => {
+      if (payload.canvas_id !== canvasId || !excalidrawAPI) return
+      const incoming = normalizeCanvasElementsForScene(
+        (payload.elements || []) as unknown as ReadonlyArray<{
+          id: string
+          [key: string]: unknown
+        }>
+      ) as unknown as OrderedExcalidrawElement[]
+      if (!incoming.length) return
+
+      const incomingById = new Map(incoming.map((el) => [el.id, el]))
+      const current = excalidrawAPI.getSceneElementsIncludingDeleted()
+      const merged: OrderedExcalidrawElement[] = current.map((el) =>
+        incomingById.has(el.id) ? incomingById.get(el.id)! : el
+      )
+      const existingIds = new Set(current.map((el) => el.id))
+      for (const item of incoming) {
+        if (!existingIds.has(item.id)) {
+          merged.push(item)
+        }
+      }
+      excalidrawAPI.updateScene({ elements: merged })
+    },
+    [canvasId, excalidrawAPI]
+  )
+
   useEffect(() => {
     eventBus.on('Socket::Session::ImageGenerated', handleImageGenerated)
     eventBus.on('Socket::Session::VideoGenerated', handleVideoGenerated)
     eventBus.on('Socket::Session::AudioGenerated', handleAudioGenerated)
+    eventBus.on('Socket::Session::CanvasElementsUpdated', handleCanvasElementsUpdated)
     eventBus.on('Canvas::SyncGeneratedImages', handleSyncGeneratedImages)
     return () => {
       eventBus.off('Socket::Session::ImageGenerated', handleImageGenerated)
       eventBus.off('Socket::Session::VideoGenerated', handleVideoGenerated)
       eventBus.off('Socket::Session::AudioGenerated', handleAudioGenerated)
+      eventBus.off('Socket::Session::CanvasElementsUpdated', handleCanvasElementsUpdated)
       eventBus.off('Canvas::SyncGeneratedImages', handleSyncGeneratedImages)
     }
-  }, [handleAudioGenerated, handleImageGenerated, handleSyncGeneratedImages, handleVideoGenerated])
+  }, [
+    handleAudioGenerated,
+    handleCanvasElementsUpdated,
+    handleImageGenerated,
+    handleSyncGeneratedImages,
+    handleVideoGenerated,
+  ])
 
   return (
     <div

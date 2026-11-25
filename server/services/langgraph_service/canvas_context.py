@@ -21,8 +21,25 @@ def _extract_filename_from_file_entry(file_entry: Any) -> str:
     return _extract_filename_from_url(file_entry.get("dataURL"))
 
 
+def _describe_relative_region(rx_pct: int, ry_pct: int) -> str:
+    """将 0~100 的百分比坐标转换为直观的中文九宫格方位描述。"""
+    horiz = "左侧" if rx_pct < 34 else ("右侧" if rx_pct > 66 else "居中")
+    vert = "上方" if ry_pct < 34 else ("下方" if ry_pct > 66 else "中部")
+    if horiz == "左侧" and vert == "上方":
+        return "左上角"
+    if horiz == "右侧" and vert == "上方":
+        return "右上角"
+    if horiz == "左侧" and vert == "下方":
+        return "左下角"
+    if horiz == "右侧" and vert == "下方":
+        return "右下角"
+    if horiz == "居中" and vert == "中部":
+        return "正中央"
+    return f"{vert}{horiz}"
+
+
 def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
-    """将画布当前可见元素整理为紧凑上下文片段，支持直接按画布文字框脚本生图/生视频及按序引用已有作品。"""
+    """将画布当前可见元素整理为紧凑上下文片段，支持直接按画布文字框脚本生图/生视频、识别序号角标指向位置及按序引用已有作品。"""
     if not isinstance(canvas_data, dict):
         return ""
     raw_elements = canvas_data.get("elements")
@@ -43,6 +60,8 @@ def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
     text_lines: List[str] = []
     frame_lines: List[str] = []
     media_lines: List[str] = []
+    callout_badges: List[Dict[str, Any]] = []
+    media_targets: List[Dict[str, Any]] = []
     shape_counts: Dict[str, int] = {}
 
     sorted_active = sorted(
@@ -56,6 +75,15 @@ def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
         y = round(float(elem.get("y") or 0))
         w = round(float(elem.get("width") or 0))
         h = round(float(elem.get("height") or 0))
+        custom = elem.get("customData") if isinstance(elem.get("customData"), dict) else {}
+
+        if custom.get("jaazType") == "callout-badge-label":
+            # 跳过角标内部数字文本，避免混入普通分镜文字框列表
+            continue
+        if custom.get("jaazType") == "callout-badge":
+            callout_badges.append(elem)
+            shape_counts["calloutBadge"] = shape_counts.get("calloutBadge", 0) + 1
+            continue
 
         if etype == "text":
             txt = str(elem.get("text") or elem.get("originalText") or "").strip()
@@ -85,8 +113,6 @@ def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
             fname = str(elem.get("name") or elem.get("id") or "Frame")
             frame_lines.append(f"- 画框 \"{fname}\" @(x={x}, y={y}, {w}×{h})")
         elif etype in ("image", "video", "audio", "embeddable"):
-            if len(media_lines) >= MAX_MEDIA_ITEMS:
-                continue
             fid = str(elem.get("fileId") or elem.get("id") or "")
             real_name = _extract_filename_from_file_entry(files_map.get(fid)) or _extract_filename_from_url(elem.get("link"))
             if not real_name:
@@ -98,16 +124,69 @@ def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
                 kind_cn = "音频"
             else:
                 kind_cn = "视频"
-            media_lines.append(
-                f"- 画布{kind_cn}#{len(media_lines) + 1}: file_id=\"{real_name}\" ({w}×{h}, @(x={x}, y={y}))"
+            media_targets.append(
+                {
+                    "id": str(elem.get("id") or ""),
+                    "file_id": real_name,
+                    "kind_cn": kind_cn,
+                    "x": float(elem.get("x") or 0),
+                    "y": float(elem.get("y") or 0),
+                    "w": max(1.0, float(elem.get("width") or 1)),
+                    "h": max(1.0, float(elem.get("height") or 1)),
+                }
             )
+            if len(media_lines) < MAX_MEDIA_ITEMS:
+                lineage_parts = []
+                if custom.get("workflowName"):
+                    lineage_parts.append(f"workflow={custom.get('workflowName')}")
+                if custom.get("parentFileIds"):
+                    lineage_parts.append(f"parents={custom.get('parentFileIds')}")
+                lineage_str = f" [{', '.join(lineage_parts)}]" if lineage_parts else ""
+                media_lines.append(
+                    f"- 画布{kind_cn}#{len(media_lines) + 1}: file_id=\"{real_name}\" ({w}×{h}, @(x={x}, y={y})){lineage_str}"
+                )
         else:
-            custom = elem.get("customData") if isinstance(elem.get("customData"), dict) else {}
             if custom.get("jaazType") == "blockArrow":
                 label = f"blockArrow({custom.get('variant', 'straight')})"
             else:
                 label = etype or "shape"
             shape_counts[label] = shape_counts.get(label, 0) + 1
+
+    # 解析圆形序号角标指向的底图与相对位置（A3）
+    badge_lines: List[str] = []
+    margin = 40.0
+    for badge in sorted(
+        callout_badges,
+        key=lambda b: int(((b.get("customData") or {}).get("calloutNumber")) or 0),
+    ):
+        cd = badge.get("customData") or {}
+        bnum = cd.get("calloutNumber", "?")
+        bx = float(badge.get("x") or 0) + float(badge.get("width") or 36) / 2
+        by = float(badge.get("y") or 0) + float(badge.get("height") or 36) / 2
+        matched_media = None
+        explicit_tid = str(cd.get("targetElementId") or "")
+        for mt in media_targets:
+            if explicit_tid and mt["id"] == explicit_tid:
+                matched_media = mt
+                break
+        if matched_media is None:
+            for mt in media_targets:
+                if (
+                    mt["x"] - margin <= bx <= mt["x"] + mt["w"] + margin
+                    and mt["y"] - margin <= by <= mt["y"] + mt["h"] + margin
+                ):
+                    matched_media = mt
+                    break
+        if matched_media is not None:
+            rx_pct = max(0, min(100, round((bx - matched_media["x"]) / matched_media["w"] * 100)))
+            ry_pct = max(0, min(100, round((by - matched_media["y"]) / matched_media["h"] * 100)))
+            region = _describe_relative_region(rx_pct, ry_pct)
+            badge_lines.append(
+                f"- 标注 #{bnum} @(x={round(bx)}, y={round(by)}) → 指向{matched_media['kind_cn']} "
+                f"file_id=\"{matched_media['file_id']}\" 的{region}区域 (相对坐标 {rx_pct}%, {ry_pct}%)"
+            )
+        else:
+            badge_lines.append(f"- 标注 #{bnum} @(x={round(bx)}, y={round(by)})")
 
     sections: List[str] = []
     if frame_lines:
@@ -115,10 +194,15 @@ def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
     if shape_counts:
         summary = ", ".join(f"{k}×{v}" for k, v in sorted(shape_counts.items()))
         sections.append(f"画布图形元素统计: {summary}")
+    if badge_lines:
+        sections.append(
+            "画布序号角标指向关系（当用户提到“①号位置”“标注2处”等局部指令时，请结合对应底图与相对区域执行）:\n"
+            + "\n".join(badge_lines)
+        )
     if text_lines:
         sections.append("画布上的文字框/脚本内容（按从上到下、从左到右排序）:\n" + "\n".join(text_lines))
     if media_lines:
-        sections.append("画布上已有的图像/视频作品（可直接将其 file_id 传入编辑或图生视频工具）:\n" + "\n".join(media_lines))
+        sections.append("画布上已有的图像/视频作品（可直接将其 file_id 传入编辑、图生视频或画布排版连线工具）:\n" + "\n".join(media_lines))
 
     if not sections:
         return ""

@@ -1,5 +1,20 @@
 ﻿# Jaaz 变更记录（Changelog）
 
+## 2026-11-25 — 阶段 P1–P4 执行链路加固、Agent 画布编排、深度交互与模块拆分
+
+### 修复与加固（Fixed）
+- **子图工具调用即时幂等落库（P1）**：`StreamProcessor` 在收到 `ToolMessage` 时立即按 `tool_call_id` 去重写入 `assistant(tool_calls)` 与 `tool` 消息，防止出图后上游总结阶段 `429` 限流或断网丢失工具历史。
+- **ComfyUI 中间预览输出过滤（P1）**：支持 `jaaz.workflow.json` 的 `outputs` 白名单及终端保存节点（`SaveImage` / `SaveVideo` / `SaveAudio` / `VHS_VideoCombine`）自动过滤，剔除 `LoadVideo` / `LoadImage` / `PreviewImage` 中间预览产物。
+- **跨模型家族显存自动释放（P1）**：`comfy_instance_service` 跟踪实例最近执行的模型家族，跨家族切换时自动调用 `/api/free` 释放闲置权重缓存。
+
+### 新增（Added）
+- **Python Agent 原生画布编排与指向式指令（P2 / A2 / A3 / A9）**：新增 `canvas_arrange_elements` 与 `canvas_connect_and_badge` 系统工具及 Socket.IO `canvas_elements_updated` 实时增量合并；在 `<canvas_scene_context>` 解析 `callout-badge`（`①②③`）附着的底层媒体与九宫格坐标；新增 `context_compactor` 自动折叠早期 `write_plan` 与超长工具提示词参数。
+- **画布深度交互、血缘谱系、增量同步与历史快照（P3 / G2 / E8 / X1 / C9 / C1 / C7 / C10 / C11）**：新增涂抹遮罩 PNG 导出、前后对比滑块、翻转/圆角、按 `Frame` 多格式/PDF 导出、`jaazLineage` 血缘溯源与换种子一键重抽、`/api/canvas/{id}/ops` 增量同步、图层管理与 SQLite 历史快照回退，以及视口外视频自动暂停。
+- **创作工作台、TTS 配音、批量变量展开与内置 `ffmpeg` 自动剪辑拼接（P4 / M1 / E10 / V3 / V4 / W1 / W2）**：新增跨画布资产检索入画、分镜与提示词模板、CSV 表格变量批量展开、悬浮栏一键 TTS 配音；内置 `server/bin/ffmpeg.exe` 与 `ffprobe.exe` 零外部环境依赖执行，新增 `video_edit_and_stitch` 智能体工具支持单段截齐裁剪、48kHz 原生立体声音轨无缝串联、衔接处音画柔化转场及画布 `jaazLineage` 血缘溯源，并通过 `4 × 15s -> 60.0s` 1 分钟完整有声短片端到端实测验收。
+
+### 工程治理（Changed）
+- **超长模块拆分与脱敏日志统一（P4 / R-17 / R-19）**：将 `comfy_workflow_pack.py`、`db_service.py`、`comfyui_router.py`、`llm_adapters.py` 按职责拆分为 10 个不超过 600 行的模块并保留全部公开导出；将核心服务残余 `print` 收敛至 `get_sanitized_logger`。
+
 ## 2026-11-25 — 画质参数修复、全媒体边界闭环与 Stage C 工程治理
 
 ### 修复（Fixed）

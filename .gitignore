@@ -20,3 +20,6 @@ user_data/
 .continue
 
 .env
+
+# Project-bundled local FFmpeg binaries (>100MB GitHub limit)
+server/bin/*.exe

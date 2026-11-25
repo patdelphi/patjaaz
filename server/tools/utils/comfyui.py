@@ -17,6 +17,7 @@ from services.config_service import (
     VIDEO_FORMATS,
     config_service,
 )
+from services.file_mapping_service import parse_comfy_view_url, record_file_mapping
 from tools.video_generation.video_canvas_utils import get_video_info_and_save
 from utils.http_client import HttpClient
 from .image_utils import generate_image_id, get_image_info_and_save
@@ -244,6 +245,20 @@ class ComfyUIWorkflowRunner:
             )
 
             filename = f"{image_id}.{extension}"
+            parsed_src = parse_comfy_view_url(url)
+            if isinstance(ctx, dict):
+                ctx.setdefault("remote_file_map", {})[filename] = parsed_src
+            try:
+                record_file_mapping(
+                    filename,
+                    source_url=url,
+                    canvas_id=str(ctx.get("canvas_id") or "") if isinstance(ctx, dict) else "",
+                    session_id=str(ctx.get("session_id") or "") if isinstance(ctx, dict) else "",
+                    workflow_name=str(ctx.get("workflow_name") or "") if isinstance(ctx, dict) else "",
+                    note="ComfyUI 自动下载映射",
+                )
+            except Exception:
+                pass
             results.append((mime_type, width, height, filename))
 
         return results

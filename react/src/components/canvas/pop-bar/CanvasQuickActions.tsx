@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useCanvas } from '@/contexts/canvas'
 import { eventBus, TCanvasAddImagesToChatEvent } from '@/lib/event'
-import { ChevronDown, Film, ImagePlus, Layers, Palette, Sparkles, Wand2 } from 'lucide-react'
+import { ChevronDown, Film, ImagePlus, Layers, Palette, Sparkles, Volume2, Wand2 } from 'lucide-react'
 import React, { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -121,6 +121,14 @@ export const CanvasQuickActions: React.FC<CanvasQuickActionsProps> = ({
             >
               <Film className="mr-2 size-4" aria-hidden="true" />
               <span>按此分镜脚本生成视频</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                applyQuickAction('请将上方画布文字框中的台词或旁白合成为自然清晰的人声配音音频并放入画布。')
+              }
+            >
+              <Volume2 className="mr-2 size-4" aria-hidden="true" />
+              <span>按此脚本生成配音音频</span>
             </DropdownMenuItem>
           </>
         )}

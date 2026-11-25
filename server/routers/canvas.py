@@ -6,6 +6,10 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
+from services.canvas_ops_service import (
+    apply_canvas_element_ops,
+    canvas_snapshot_service,
+)
 from services.chat_service import handle_chat
 from services.db_service import db_service
 from utils.canvas_lock import canvas_lock_manager
@@ -181,6 +185,75 @@ async def delete_canvas(id: str):
     try:
         await db_service.delete_canvas(id)
         return {"id": id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/{id}/ops")
+async def apply_canvas_ops(id: str, request: Request):
+    """在画布互斥锁保护下应用元素级增量 op（upsert / delete / reorder），减少整包 JSON 传输。"""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("ops"), list):
+            raise HTTPException(status_code=400, detail="ops list is required")
+
+        thumbnail = payload.get("thumbnail") if isinstance(payload.get("thumbnail"), str) else None
+        async with canvas_lock_manager.lock_canvas(id):
+            existing = await db_service.get_canvas_data(id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Canvas not found")
+            merged_data = apply_canvas_element_ops(
+                existing.get("data"),
+                payload["ops"],
+                incoming_files=payload.get("files") if isinstance(payload.get("files"), dict) else None,
+                app_state=payload.get("appState") if isinstance(payload.get("appState"), dict) else None,
+            )
+            saved = await db_service.save_canvas_data(id, json.dumps(merged_data), thumbnail)
+        if not saved:
+            raise HTTPException(status_code=404, detail="Canvas not found")
+        return {"id": id, "applied": len(payload["ops"])}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/{id}/snapshots")
+async def list_canvas_snapshots(id: str):
+    """列出指定画布的历史版本快照。"""
+    try:
+        return await canvas_snapshot_service.list_snapshots(id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/{id}/snapshots")
+async def create_canvas_snapshot(id: str, request: Request):
+    """为指定画布创建一份时间点快照。"""
+    try:
+        body = await request.json() if request.headers.get("content-length") != "0" else {}
+        note = str((body or {}).get("note") or "") if isinstance(body, dict) else ""
+        return await canvas_snapshot_service.create_snapshot(id, note=note)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/{id}/snapshots/{snap_id}/restore")
+async def restore_canvas_snapshot(id: str, snap_id: str):
+    """将指定画布加锁回退到某个历史快照版本，并返回恢复后的画布数据。"""
+    try:
+        async with canvas_lock_manager.lock_canvas(id):
+            return await canvas_snapshot_service.restore_snapshot(id, snap_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except HTTPException:
         raise
     except Exception as exc:

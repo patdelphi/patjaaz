@@ -49,6 +49,7 @@ export const VideoElement: React.FC<VideoElementProps> = ({
     const [isHovered, setIsHovered] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
     const [totalDuration, setTotalDuration] = useState<number>(duration || 0)
+    const containerRef = useRef<HTMLDivElement>(null)
     const videoRef = useRef<HTMLVideoElement>(null)
 
     if (isPreview) {
@@ -160,14 +161,65 @@ export const VideoElement: React.FC<VideoElementProps> = ({
         }
     }, [loop, onEnded, onTimeUpdate])
 
+    // 大画布视口外视频自动暂停减负（C11）：优先监听 contentvisibilityautostatechange，不支持时回退 IntersectionObserver
+    useEffect(() => {
+        const container = containerRef.current
+        const video = videoRef.current
+        if (!container || !video || typeof window === 'undefined') return
+
+        const pauseIfOffscreen = () => {
+            if (!video.paused) {
+                video.pause()
+                setIsPlaying(false)
+            }
+        }
+
+        const handleContentVisibility = (ev: Event) => {
+            const skipped = Boolean((ev as Event & { skipped?: boolean }).skipped)
+            if (skipped) {
+                pauseIfOffscreen()
+            }
+        }
+        container.addEventListener('contentvisibilityautostatechange', handleContentVisibility)
+
+        let observer: IntersectionObserver | null = null
+        if (typeof IntersectionObserver !== 'undefined') {
+            observer = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (!entry.isIntersecting) {
+                            pauseIfOffscreen()
+                        }
+                    }
+                },
+                { rootMargin: '160px' }
+            )
+            observer.observe(container)
+        }
+
+        return () => {
+            container.removeEventListener(
+                'contentvisibilityautostatechange',
+                handleContentVisibility
+            )
+            observer?.disconnect()
+        }
+    }, [])
+
     const intWidth = Math.max(1, Math.round(width))
     const intHeight = Math.max(1, Math.round(height))
 
     // 主体不拦截 pointerDown，确保在视频画面内可直接按住拖拽移动或选中画布元素；底部控制栏独立响应播放与音量控制
     return (
         <div
+            ref={containerRef}
             className={cn('group relative select-none overflow-hidden rounded-md', className)}
-            style={{ width: intWidth, height: intHeight }}
+            style={{
+                width: intWidth,
+                height: intHeight,
+                contentVisibility: 'auto',
+                containIntrinsicSize: `auto ${intWidth}px auto ${intHeight}px`,
+            }}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >

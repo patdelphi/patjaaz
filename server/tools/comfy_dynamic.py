@@ -16,7 +16,10 @@ from langchain_core.tools import BaseTool, InjectedToolCallId, tool
 from pydantic import BaseModel, Field, create_model
 
 from routers.comfyui_execution import upload_image
-from services.comfy_instance_service import comfy_instance_service
+from services.comfy_instance_service import (
+    comfy_instance_service,
+    infer_workflow_model_family,
+)
 from services.config_service import FILES_DIR, IMAGE_FORMATS, VIDEO_FORMATS
 from services.db_service import db_service
 from services.websocket_service import broadcast_session_update, send_to_websocket
@@ -332,6 +335,25 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         }
 
         required_data = dict(kwargs)
+        # 提取原始输入媒体文件名与提示词参数，供生成元素写入 customData 血缘谱系（C9）
+        lineage_parent_files: List[str] = []
+        lineage_prompt = ""
+        lineage_scalar_params: Dict[str, Any] = {}
+        for k_raw, v_raw in kwargs.items():
+            if k_raw == "tool_call_id" or v_raw is None:
+                continue
+            p_kind = param_type_by_name.get(k_raw, "string")
+            if p_kind in ("image", "video", "audio") and isinstance(v_raw, str) and v_raw.strip():
+                clean_parent = v_raw.strip().split("/")[-1]
+                if clean_parent and clean_parent.lower() != "none":
+                    lineage_parent_files.append(clean_parent)
+            elif isinstance(v_raw, str) and any(
+                pk in k_raw.lower() for pk in ("prompt", "instruction", "text")
+            ):
+                if not lineage_prompt:
+                    lineage_prompt = v_raw.strip()[:1000]
+            elif isinstance(v_raw, (int, float, bool, str)):
+                lineage_scalar_params[k_raw] = v_raw
         # 记录本次复用 SHA-256 缓存的本地媒体，若远端重启清空了 input/ 可自动失效重传一次
         cached_media_entries: List[tuple[str, str, str, bytes, str, str, str]] = []
         try:
@@ -414,8 +436,12 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             )
         except Exception as job_exc:
             print(f"[comfy_dynamic] Warning creating job record: {job_exc}")
-        # 让执行层能把远端 prompt_id 回写到这条任务
+        # 让执行层能把远端 prompt_id 回写到这条任务，并透传显式输出节点配置
         ctx["job_id"] = job_id
+        ctx["workflow_name"] = str(wf.get("name") or "")
+        if wf.get("outputs"):
+            ctx["explicit_outputs"] = wf.get("outputs")
+        model_family = infer_workflow_model_family(str(wf.get("name") or ""), workflow_dict)
 
         try:
             generator = ComfyUIWorkflowRunner(
@@ -427,6 +453,12 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             )
             # 按实例 max_concurrency 限流：超出的任务排队等待，而不是同时提交到同一实例
             async with comfy_instance_service.acquire_slot(instance_id, max_concurrency):
+                await comfy_instance_service.maybe_free_memory_on_family_switch(
+                    instance_id,
+                    api_url,
+                    model_family,
+                    headers=auth_headers,
+                )
                 try:
                     outputs = await generator.generate(ctx=ctx)
                 except Exception as first_exc:
@@ -527,6 +559,30 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                         )
 
                     if new_element is not None:
+                        remote_info = (ctx.get("remote_file_map") or {}).get(filename) or {}
+                        existing_cd = (
+                            dict(new_element.get("customData"))
+                            if isinstance(new_element.get("customData"), dict)
+                            else {}
+                        )
+                        existing_cd.update(
+                            {
+                                "workflowName": wf["name"],
+                                "parentFileIds": lineage_parent_files,
+                                "jaazLineage": {
+                                    "workflowName": wf["name"],
+                                    "displayName": wf.get("display_name") or wf["name"],
+                                    "capability": wf.get("capability") or "t2i",
+                                    "prompt": lineage_prompt,
+                                    "params": lineage_scalar_params,
+                                    "parentFileIds": lineage_parent_files,
+                                    "comfyOutputPath": remote_info.get("comfy_rel", ""),
+                                    "driveFilePath": remote_info.get("drive_path", ""),
+                                    "createdAt": int(time.time() * 1000),
+                                },
+                            }
+                        )
+                        new_element["customData"] = existing_cd
                         canvas_data["data"]["elements"].append(new_element)
                         canvas_data["data"]["files"][file_id] = file_data
                         canvas_changed = True

@@ -12,7 +12,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 print('Importing websocket_router')
 from routers.websocket_router import *  # DO NOT DELETE THIS LINE, OTHERWISE, WEBSOCKET WILL NOT WORK
 print('Importing routers')
-from routers import auth as auth_router, comfyui_router, config_router, image_router, root_router, workspace, canvas, chat_router, settings, tool_confirmation
+from routers import auth as auth_router, comfyui_router, config_router, image_router, root_router, studio_router, workspace, canvas, chat_router, settings, tool_confirmation
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -211,6 +211,7 @@ app.include_router(comfyui_router.router)
 app.include_router(settings.router)
 app.include_router(root_router.router)
 app.include_router(canvas.router)
+app.include_router(studio_router.router)
 app.include_router(workspace.router)
 app.include_router(image_router.router)
 if os.getenv("JAAZ_DEBUG", "").strip() == "1":

@@ -1,4 +1,6 @@
 from typing import List, Dict, Any, Optional
+from utils.log_sanitizer import get_sanitized_logger
+_logger = get_sanitized_logger(__name__)
 from langgraph.prebuilt import create_react_agent  # type: ignore
 from langgraph.graph.graph import CompiledGraph
 from langchain_core.tools import BaseTool
@@ -35,8 +37,7 @@ class AgentManager:
         grouped = group_tools_by_capability(tool_list)
         group_names = list(grouped.keys())
         for group_name, group_tools in grouped.items():
-            print(f"🧩 能力分组 {group_name}: {[t.get('id') for t in group_tools]}")
-
+            _logger.info(f"🧩 能力分组 {group_name}: {[t.get('id') for t in group_tools]}")
         planner_config = PlannerAgentConfig(group_names, extra_prompt=system_prompt)
         planner_agent = AgentManager._create_langgraph_agent(
             model, planner_config)
@@ -74,12 +75,28 @@ class AgentManager:
             if handoff_tool:
                 handoff_tools.append(handoff_tool)
 
-        # 获取业务工具
+        # 获取业务工具，并为所有智能体挂载画布原生排版与连线标注系统工具（A2）
         business_tools: List[BaseTool] = []
+        seen_tool_ids: set[str] = set()
         for tool_json in config.tools:
-            tool = tool_service.get_tool(tool_json['id'])
-            if tool:
+            tid = str(tool_json.get('id') or '')
+            tool = tool_service.get_tool(tid)
+            if tool and tid not in seen_tool_ids:
                 business_tools.append(tool)
+                seen_tool_ids.add(tid)
+
+        for sys_canvas_tid in ('canvas_arrange_elements', 'canvas_connect_and_badge'):
+            if sys_canvas_tid not in seen_tool_ids:
+                sys_tool = tool_service.get_tool(sys_canvas_tid)
+                if sys_tool:
+                    business_tools.append(sys_tool)
+                    seen_tool_ids.add(sys_canvas_tid)
+
+        if config.name != 'planner' and 'video_edit_and_stitch' not in seen_tool_ids:
+            stitch_tool = tool_service.get_tool('video_edit_and_stitch')
+            if stitch_tool:
+                business_tools.append(stitch_tool)
+                seen_tool_ids.add('video_edit_and_stitch')
 
         # 创建并返回 LangGraph 智能体
         return create_react_agent(

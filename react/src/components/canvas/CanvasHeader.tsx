@@ -1,5 +1,7 @@
 import { Input } from '@/components/ui/input'
 import CanvasExport from './CanvasExport'
+import CanvasLayersAndSnapshotsDrawer from './CanvasLayersAndSnapshotsDrawer'
+import CanvasStudioDrawer from './CanvasStudioDrawer'
 import TopMenu from '../TopMenu'
 
 type CanvasHeaderProps = {
@@ -11,7 +13,7 @@ type CanvasHeaderProps = {
 
 const CanvasHeader: React.FC<CanvasHeaderProps> = ({
   canvasName,
-  canvasId: _canvasId,
+  canvasId,
   onNameChange,
   onNameSave,
 }) => {
@@ -25,7 +27,13 @@ const CanvasHeader: React.FC<CanvasHeaderProps> = ({
           onBlur={onNameSave}
         />
       }
-      right={<CanvasExport />}
+      right={
+        <div className="flex items-center gap-2">
+          <CanvasStudioDrawer canvasId={canvasId} />
+          <CanvasLayersAndSnapshotsDrawer canvasId={canvasId} />
+          <CanvasExport />
+        </div>
+      }
     />
   )
 }

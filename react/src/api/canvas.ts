@@ -93,3 +93,74 @@ export async function deleteCanvas(id: string): Promise<void> {
   })
   return await response.json()
 }
+
+export type CanvasElementOp = {
+  op: 'upsert' | 'delete' | 'reorder'
+  id?: string
+  element?: Record<string, unknown>
+  order_ids?: string[]
+}
+
+export async function applyCanvasOps(
+  id: string,
+  payload: {
+    ops: CanvasElementOp[]
+    files?: Record<string, unknown>
+    appState?: Record<string, unknown>
+    thumbnail?: string
+  }
+): Promise<{ id: string; applied: number }> {
+  const response = await apiFetch(`/api/canvas/${id}/ops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Failed to apply canvas ops (${response.status}): ${errorText}`)
+  }
+  return await response.json()
+}
+
+export type CanvasSnapshotSummary = {
+  id: string
+  canvas_id: string
+  note: string
+  element_count: number
+  thumbnail?: string
+  created_at: string
+}
+
+export async function listCanvasSnapshots(id: string): Promise<CanvasSnapshotSummary[]> {
+  const response = await apiFetch(`/api/canvas/${id}/snapshots`)
+  if (!response.ok) return []
+  return await response.json()
+}
+
+export async function createCanvasSnapshot(
+  id: string,
+  note = ''
+): Promise<CanvasSnapshotSummary> {
+  const response = await apiFetch(`/api/canvas/${id}/snapshots`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to create snapshot (${response.status})`)
+  }
+  return await response.json()
+}
+
+export async function restoreCanvasSnapshot(
+  id: string,
+  snapId: string
+): Promise<{ id: string; snapshot_id: string; data: CanvasData }> {
+  const response = await apiFetch(`/api/canvas/${id}/snapshots/${snapId}/restore`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to restore snapshot (${response.status})`)
+  }
+  return await response.json()
+}

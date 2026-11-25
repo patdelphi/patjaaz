@@ -2,8 +2,13 @@
 import { TCanvasAddImagesToChatEvent } from '@/lib/event'
 import { motion } from 'motion/react'
 import { memo } from 'react'
-import type { ExcalidrawElement, OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import type {
+  ExcalidrawElement,
+  ExcalidrawImageElement,
+  OrderedExcalidrawElement,
+} from '@excalidraw/excalidraw/element/types'
 import CanvasBlockArrowControls from './CanvasBlockArrowControls'
+import CanvasImageTools from './CanvasImageTools'
 import CanvasPopbar from './CanvasPopbar'
 import CanvasQuickActions from './CanvasQuickActions'
 import CanvasStrokeWidth from './CanvasStrokeWidth'
@@ -12,6 +17,7 @@ import CanvasTextBackground from './CanvasTextBackground'
 type CanvasPopbarContainerProps = {
   pos: { x: number; y: number }
   selectedImages: TCanvasAddImagesToChatEvent
+  selectedImageElements: ExcalidrawImageElement[]
   selectedTexts: string[]
   selectedTextElements: OrderedExcalidrawElement[]
   selectedStrokeElements: ExcalidrawElement[]
@@ -25,6 +31,7 @@ type CanvasPopbarContainerProps = {
 const CanvasPopbarContainer = ({
   pos,
   selectedImages,
+  selectedImageElements,
   selectedTexts,
   selectedTextElements,
   selectedStrokeElements,
@@ -55,6 +62,12 @@ const CanvasPopbarContainer = ({
         )}
         {showBlockArrow && (
           <CanvasBlockArrowControls selectedBlockArrows={selectedBlockArrows} />
+        )}
+        {selectedImageElements.length > 0 && (
+          <CanvasImageTools
+            selectedImageElements={selectedImageElements}
+            selectedImagesForChat={selectedImages}
+          />
         )}
         {showAddToChat && (
           <>

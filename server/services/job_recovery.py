@@ -1,5 +1,7 @@
 """程序说明：服务重启后接管仍在 ComfyUI 上执行的任务，轮询 /history 取回产出并写回原画布，避免长视频任务因重启丢失结果。"""
 from __future__ import annotations
+from utils.log_sanitizer import get_sanitized_logger
+_logger = get_sanitized_logger(__name__)
 
 import asyncio
 import json
@@ -99,7 +101,7 @@ async def append_outputs_to_canvas(
                 },
             )
         except Exception as exc:
-            print(f"[job_recovery] broadcast failed: {exc}")
+            _logger.info(f"[job_recovery] broadcast failed: {exc}")
     return len(added)
 
 
@@ -163,7 +165,13 @@ async def recover_job(job: Dict[str, Any]) -> str:
                     finished_at=_now_iso(),
                 )
                 return "failed"
-            urls = history_output_urls(record, base_url)
+            wf_dict = None
+            if job.get("workflow_id"):
+                try:
+                    wf_dict = await db_service.get_comfy_workflow(int(job["workflow_id"]))
+                except Exception:
+                    wf_dict = None
+            urls = history_output_urls(record, base_url, workflow=wf_dict)
             if not urls:
                 await db_service.update_job_status(
                     job_id, status="failed", error="ComfyUI finished without outputs",
@@ -186,7 +194,7 @@ async def recover_job(job: Dict[str, Any]) -> str:
                 progress_text=f"Recovered {added} output(s) after server restart",
                 finished_at=_now_iso(),
             )
-            print(f"[job_recovery] job {job_id} recovered {added} output(s) into canvas {canvas_id}")
+            _logger.info(f"[job_recovery] job {job_id} recovered {added} output(s) into canvas {canvas_id}")
             return "completed"
 
         if state == "pending":
@@ -221,4 +229,4 @@ async def recover_jobs(jobs: List[Dict[str, Any]]) -> None:
     )
     for job, result in zip(jobs, results):
         if isinstance(result, Exception):
-            print(f"[job_recovery] job {job.get('id')} crashed: {result}")
+            _logger.info(f"[job_recovery] job {job.get('id')} crashed: {result}")

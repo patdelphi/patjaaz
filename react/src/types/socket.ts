@@ -18,6 +18,7 @@ export enum SessionEventType {
   ToolCallPendingConfirmation = 'tool_call_pending_confirmation',
   ToolCallConfirmed = 'tool_call_confirmed',
   ToolCallCancelled = 'tool_call_cancelled',
+  CanvasElementsUpdated = 'canvas_elements_updated',
 }
 
 export interface SessionBaseEvent {
@@ -104,6 +105,12 @@ export interface SessionToolCallCancelledEvent extends SessionBaseEvent {
   id: string
 }
 
+export interface SessionCanvasElementsUpdatedEvent extends SessionBaseEvent {
+  type: SessionEventType.CanvasElementsUpdated
+  canvas_id: string
+  elements: Record<string, unknown>[]
+}
+
 export type SessionUpdateEvent =
   | SessionDeltaEvent
   | SessionToolCallEvent
@@ -120,3 +127,4 @@ export type SessionUpdateEvent =
   | SessionToolCallPendingConfirmationEvent
   | SessionToolCallConfirmedEvent
   | SessionToolCallCancelledEvent
+  | SessionCanvasElementsUpdatedEvent

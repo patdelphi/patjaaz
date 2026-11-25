@@ -1,10 +1,17 @@
 """程序说明：管理并过滤后端可用工具注册表，仅注册系统必要工具与已启用的本地生成工作流。"""
 import asyncio
+from utils.log_sanitizer import get_sanitized_logger
+_logger = get_sanitized_logger(__name__)
 import traceback
 from typing import Dict
 from langchain_core.tools import BaseTool
 from models.tool_model import ToolInfo
+from tools.canvas_tools import (
+    canvas_arrange_elements_tool,
+    canvas_connect_and_badge_tool,
+)
 from tools.comfy_dynamic import build_tool
+from tools.video_edit_tools import video_edit_and_stitch_tool
 from tools.write_plan import write_plan_tool
 from services.comfy_instance_service import comfy_instance_service
 from services.config_service import config_service
@@ -22,19 +29,33 @@ class ToolService:
         self._register_required_tools()
 
     def _register_required_tools(self):
-        """注册必须的工具"""
+        """注册必须的系统工具（计划制定与画布原生排版标注）"""
         try:
             self.tools["write_plan"] = {
                 "provider": "system",
                 "tool_function": write_plan_tool,
             }
+            self.tools["canvas_arrange_elements"] = {
+                "provider": "system",
+                "tool_function": canvas_arrange_elements_tool,
+            }
+            self.tools["canvas_connect_and_badge"] = {
+                "provider": "system",
+                "tool_function": canvas_connect_and_badge_tool,
+            }
+            self.tools["video_edit_and_stitch"] = {
+                "provider": "system",
+                "tool_function": video_edit_and_stitch_tool,
+                "display_name": "FFmpeg 视频自动剪辑与拼接",
+                "type": "video",
+                "capability": "i2v",
+            }
         except ImportError as e:
-            print(f"❌ 注册必须工具失败 write_plan: {e}")
-
+            _logger.info(f"❌ 注册必须工具失败: {e}")
     def register_tool(self, tool_id: str, tool_info: ToolInfo):
         """注册单个工具"""
         if tool_id in self.tools:
-            print(f"🔄 TOOL ALREADY REGISTERED: {tool_id}")
+            _logger.info(f"🔄 TOOL ALREADY REGISTERED: {tool_id}")
             return
 
         self.tools[tool_id] = tool_info
@@ -66,7 +87,7 @@ class ToolService:
             if has_enabled_instance or legacy_url:
                 await register_comfy_tools()
         except Exception as e:
-            print(f"❌ Failed to initialize tool service: {e}")
+            _logger.info(f"❌ Failed to initialize tool service: {e}")
             traceback.print_stack()
         finally:
             self.ready.set()
@@ -96,7 +117,7 @@ async def register_comfy_tools() -> Dict[str, BaseTool]:
     try:
         workflows = await db_service.list_comfy_workflows(enabled_only=True)
     except Exception as exc:  # pragma: no cover
-        print("[comfy_dynamic] Failed to list comfy workflows:", exc)
+        _logger.info("[comfy_dynamic] Failed to list comfy workflows:", exc)
         traceback.print_stack()
         return {}
 

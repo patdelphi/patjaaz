@@ -192,3 +192,20 @@
     contain: layout style paint;
   }
 }
+
+/* 原生模态 Dialog 滚动隔离与顶层遮罩样式，防止对话框内滚动穿透到底层画布 */
+dialog:modal,
+dialog.jaaz-native-modal:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop,
+dialog.jaaz-native-modal::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+dialog.jaaz-native-modal::backdrop {
+  background: rgba(9, 9, 11, 0.55);
+  backdrop-filter: blur(2px);
+}

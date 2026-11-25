@@ -2,6 +2,8 @@
 
 # Import necessary modules
 import asyncio
+from utils.log_sanitizer import get_sanitized_logger
+_logger = get_sanitized_logger(__name__)
 import json
 from typing import Dict, Any, List, Optional
 
@@ -47,8 +49,7 @@ async def handle_chat(data: Dict[str, Any]) -> None:
     text_model: ModelInfo = data.get('text_model', {})
     tool_list: List[ToolInfoJson] = data.get('tool_list', [])
 
-    print('👇 chat_service got tool_list', tool_list)
-
+    _logger.info('👇 chat_service got tool_list', tool_list)
     # 若请求未传自定义系统提示词，则回退读取服务端 settings 持久化配置
     system_prompt: Optional[str] = data.get('system_prompt')
     if not system_prompt:
@@ -112,11 +113,11 @@ async def _run_chat_task(
         )
     except asyncio.CancelledError:
         terminal_state = "cancelled"
-        print(f"🛑Session {session_id} cancelled during stream")
+        _logger.info(f"🛑Session {session_id} cancelled during stream")
     except Exception as error:
         terminal_state = "failed"
         error_message = str(error)
-        print(f"Chat session {session_id} failed: {error}")
+        _logger.info(f"Chat session {session_id} failed: {error}")
         await send_to_websocket(session_id, {
             'type': 'error',
             'error': error_message,

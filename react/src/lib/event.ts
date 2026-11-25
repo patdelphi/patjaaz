@@ -34,6 +34,7 @@ export type TEvents = {
   'Socket::Session::ToolCallPendingConfirmation': ISocket.SessionToolCallPendingConfirmationEvent
   'Socket::Session::ToolCallConfirmed': ISocket.SessionToolCallConfirmedEvent
   'Socket::Session::ToolCallCancelled': ISocket.SessionToolCallCancelledEvent
+  'Socket::Session::CanvasElementsUpdated': ISocket.SessionCanvasElementsUpdatedEvent
   // ********** Socket events - End **********
 
   // ********** Canvas events - Start **********

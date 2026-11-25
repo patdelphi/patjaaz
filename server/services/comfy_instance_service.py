@@ -7,6 +7,7 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 import hashlib
 import json
+import os
 import time
 from typing import Any, Dict, List, Optional
 import urllib.parse
@@ -95,6 +96,36 @@ def merge_masked_instance_secret(
     return merged
 
 
+def infer_workflow_model_family(
+    workflow_name: str, workflow_dict: Optional[Dict[str, Any]] = None
+) -> str:
+    """根据工作流模型文件名与标识推断模型家族，用于跨重型模型切换前的显存释放判定。"""
+    tokens: List[str] = [str(workflow_name or "").lower()]
+    if isinstance(workflow_dict, dict):
+        for node in workflow_dict.values():
+            if not isinstance(node, dict):
+                continue
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            for field_key in ("unet_name", "ckpt_name", "clip_name", "model_name", "vae_name"):
+                val = inputs.get(field_key)
+                if isinstance(val, str) and val:
+                    tokens.append(val.lower())
+    joined = " ".join(tokens)
+    if "sensenova" in joined:
+        return "sensenova"
+    if "seedvr2" in joined:
+        return "seedvr2"
+    if "moss" in joined:
+        return "moss"
+    if "minimax_h3" in joined:
+        if any(tag in joined for tag in ("fl2va", "ref2va", "video_vae", "t2v", "i2v", "ref2video")):
+            return "minimax_h3_video"
+        return "minimax_h3_image"
+    return str(workflow_name or "generic").strip().lower() or "generic"
+
+
 class ComfyInstanceService:
     """集中管理 ComfyUI 多实例配置、健康检查、参考图上传缓存与远端取消。"""
 
@@ -107,6 +138,43 @@ class ComfyInstanceService:
         ] = {}
         # instance_id -> (容量, 信号量)；容量变化时重建
         self._slots: Dict[str, tuple[int, asyncio.Semaphore]] = {}
+        # instance_id -> 最近一次执行的模型家族标识
+        self._last_model_family: Dict[str, str] = {}
+
+    async def maybe_free_memory_on_family_switch(
+        self,
+        instance_id: str,
+        base_url: str,
+        new_family: str,
+        headers: Optional[Dict[str, str]] = None,
+        auto_free: Optional[bool] = None,
+    ) -> bool:
+        """当同一实例跨大模型家族切换时，按配置自动调用 ComfyUI /api/free 卸载旧模型缓存。"""
+        inst_key = str(instance_id or "default")
+        family = str(new_family or "generic").strip().lower() or "generic"
+        prev_family = self._last_model_family.get(inst_key)
+        self._last_model_family[inst_key] = family
+
+        enabled = (
+            auto_free
+            if auto_free is not None
+            else os.getenv("JAAZ_AUTO_FREE_ON_SWITCH", "1").strip().lower()
+            not in ("0", "false", "no", "off")
+        )
+        if not enabled or not prev_family or prev_family == family or not base_url:
+            return False
+
+        try:
+            async with HttpClient.create(timeout=15.0) as client:
+                resp = await client.post(
+                    build_comfy_http_url(base_url, "/api/free"),
+                    json={"unload_models": True, "free_memory": True},
+                    headers=headers or None,
+                )
+                return 200 <= resp.status_code < 300
+        except Exception:
+            # 兼容不支持 /api/free 的旧版或模拟服务，释放失败不阻断后续正常执行
+            return False
 
     @asynccontextmanager
     async def acquire_slot(self, instance_id: str, max_concurrency: int):

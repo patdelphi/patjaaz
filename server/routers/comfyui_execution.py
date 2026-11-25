@@ -21,7 +21,11 @@ from services.comfy_instance_service import (
 )
 from services.stream_service import update_stream_status
 from services.websocket_service import send_to_websocket
-from utils.comfyui_history import COMFY_OUTPUT_KEYS, history_output_urls
+from utils.comfyui_history import (
+    COMFY_OUTPUT_KEYS,
+    history_output_urls,
+    resolve_allowed_output_node_ids,
+)
 from utils.http_client import HttpClient
 
 
@@ -230,6 +234,9 @@ class WorkflowExecution:
         self.ctx = ctx if ctx is not None else {}
         self.headers = dict(headers or {})
         self.instance_id = instance_id
+        self.allowed_output_nodes = resolve_allowed_output_node_ids(
+            self.workflow, self.ctx.get("explicit_outputs")
+        )
 
     async def close_ws(self) -> None:
         """确保关闭 WebSocket 连接，防止句柄泄漏。"""
@@ -304,8 +311,13 @@ class WorkflowExecution:
                     return False
                 response_body = response.json()
                 if isinstance(response_body, dict) and self.prompt_id in response_body:
-                    # 反向代理或 WS 断连时从完成记录恢复所有媒体输出
-                    for url in history_output_urls(response_body[self.prompt_id], self.base_url):
+                    # 反向代理或 WS 断连时从完成记录恢复所有允许输出节点的媒体
+                    for url in history_output_urls(
+                        response_body[self.prompt_id],
+                        self.base_url,
+                        workflow=self.workflow,
+                        explicit_outputs=self.ctx.get("explicit_outputs"),
+                    ):
                         if url not in self.outputs:
                             self.outputs.append(url)
                     return True
@@ -543,6 +555,13 @@ class WorkflowExecution:
 
         output = data.get("output")
         if not isinstance(output, dict):
+            return
+        if (
+            self.allowed_output_nodes is not None
+            and node_id is not None
+            and str(node_id) not in self.allowed_output_nodes
+        ):
+            # 跳过 LoadVideo / LoadImage / PreviewImage 等中间预览节点的输出，避免污染画布
             return
 
         update_stream_status(

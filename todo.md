@@ -373,26 +373,38 @@
 > 范围约束：不更换现有 Python LangGraph 智能体引擎，不做桌面端安装包实测；所有后续能力均在现有 FastAPI + LangGraph + Excalidraw 架构上渐进演进。
 
 ### 阶段 P1：实测暴露的执行链路与消息持久化加固（高优先级）
-- [ ] **子图工具调用即时落库**：改造 `StreamProcessor.py`，在工具节点返回成功结果时即时幂等写入 `chat_messages`，避免 ComfyUI 已出图落盘后因收尾总结请求偶发 `429` 或网络抖动导致对话侧缺失工具记录。
-- [ ] **ComfyUI 中间预览输出过滤**：在 `comfyui_execution.py` / `comfy_dynamic.py` 支持按 `jaaz.workflow.json` 的 `outputs` 节点白名单或终端保存节点类型（`SaveImage`、`SaveVideo`、`SaveAudio`、`VHS_VideoCombine`）过滤输出，剔除 `LoadVideo` / `LoadImage` 等输入节点的中间预览文件。
-- [ ] **实例跨模型家族显存自动释放**：在 `comfy_instance_service` 记录实例最近一次执行的工作流模型家族，跨大模型家族（如 SenseNova ↔ MiniMax H3 ↔ SeedVR2）切换前按配置自动触发 `/api/free`，降低 24GB 显存环境冷切换时的内存交换耗时。
+- [x] **子图工具调用即时落库**：改造 `StreamProcessor.py`，在工具节点返回成功结果时即时幂等写入 `chat_messages`，避免 ComfyUI 已出图落盘后因收尾总结请求偶发 `429` 或网络抖动导致对话侧缺失工具记录。
+- [x] **ComfyUI 中间预览输出过滤**：在 `comfyui_execution.py` / `comfy_dynamic.py` / `job_recovery.py` 支持按 `jaaz.workflow.json` 的 `outputs` 节点白名单或终端保存节点类型（`SaveImage`、`SaveVideo`、`SaveAudio`、`VHS_VideoCombine`）过滤输出，剔除 `LoadVideo` / `LoadImage` 等输入节点的中间预览文件。
+- [x] **实例跨模型家族显存自动释放**：在 `comfy_instance_service` 记录实例最近一次执行的工作流模型家族，跨大模型家族（如 SenseNova ↔ MiniMax H3 ↔ SeedVR2）切换前按配置自动触发 `/api/free`，降低 24GB 显存环境冷切换时的内存交换耗时。
 
 ### 阶段 P2：Python Agent 原生画布编排工具与上下文精简（原 M2 有价值项迁入）
-- [ ] **画布图形与排版工具集（A2）**：在后端新增 `canvas_arrange` / `canvas_annotate` 等 LangChain 工具并经 Socket.IO 同步前端，支持通过自然语言让 LLM 直接创建 `Frame` 分镜泳道、写入分镜文字框、重排缩放媒体卡片及绘制带标签流转箭头与序号角标。
-- [ ] **序号角标指向式局部指令（A3）**：识别画布 `callout-badge`（`①`、`②`…）所贴附的底层图像元素与相对位置，自动注入 `<canvas_scene_context>`，支持“在图片 ① 号标记处增加暖光纸灯笼”等指向式改图。
-- [ ] **长会话历史滑窗与参数折叠（A9）**：当单会话超过设定轮数时，自动折叠早期 `write_plan` 与冗长工具参数，控制上下文 Token 规模并减少上游模型限流。
+- [x] **画布图形与排版工具集（A2）**：在后端新增 `canvas_arrange_elements` / `canvas_connect_and_badge`（`server/tools/canvas_tools.py`）并经 Socket.IO `canvas_elements_updated` 同步前端，支持通过自然语言让 LLM 直接创建 `Frame` 分镜泳道、写入分镜文字框、重排缩放媒体卡片及绘制带标签流转箭头与序号角标。
+- [x] **序号角标指向式局部指令（A3）**：在 `canvas_context.py` 识别画布 `callout-badge`（`①`、`②`…）所贴附的底层图像/视频元素与九宫格相对方位及百分比坐标，自动注入 `<canvas_scene_context>`。
+- [x] **长会话历史滑窗与参数折叠（A9）**：新增 `context_compactor.py` 并在 `agent_service.py` 接入，当单会话超过设定窗口时自动折叠早期 `write_plan` 与冗长工具提示词参数，保留 `tool_call_id` 配对与 `/api/file/...` 引用。
 
 ### 阶段 P3：画布深度交互、资产血缘谱系与大画布性能（M3–M4 进阶）
-- [ ] **局部重绘涂抹遮罩与对比导出（G2 / E8 / X1）**：提供画布外层画笔涂抹遮罩（Mask）导出透明通道 PNG 对接 ComfyUI Inpaint 工作流；补齐改图前后滑块对比（Before/After）、图片翻转/圆角及按 `Frame` 批量多格式倍率导出（PNG/JPG/WebP/PDF）。
-- [ ] **生成血缘谱系与一键重抽（C9）**：在图像/视频元素 `customData` 中记录生成工作流、Prompt、Seed 与上游输入 `file_id`，悬浮栏支持查看生成参数、同参数/换种子重新生成及高亮显示上下游血缘连线。
-- [ ] **增量同步、图层快照与大画布减负（C1 / C7 / C10 / C11）**：以元素级 `op` 增量同步替代整包画布 JSON 保存；补充图层面板（显隐/锁定/排序）与画布历史快照回退；实现视口外视频自动暂停与按缩放比加载缩略图。
+- [x] **局部重绘涂抹遮罩与对比导出（G2 / E8 / X1）**：新增 `CanvasImageTools.tsx` 与 `canvasFrameExport.ts`，提供双层画布画笔涂抹遮罩（Mask）导出透明通道 PNG 对接 Inpaint 工作流、改图前后滑块对比（Before/After）、图片水平翻转/圆角切换及按 `Frame` 批量多格式倍率导出（PNG/JPG/WebP/PDF）。
+- [x] **生成血缘谱系与一键重抽（C9）**：在 `comfy_dynamic.py` 向图像/视频元素 `customData.jaazLineage` 写入生成工作流、Prompt、Seed 与上游输入 `file_id`，悬浮栏支持查看生成参数、同工作流换种子一键重抽及选中高亮上游父资产。
+- [x] **增量同步、图层快照与大画布减负（C1 / C7 / C10 / C11）**：新增 `canvas_ops_service.py`、`/api/canvas/{id}/ops` 与 `/snapshots*`、`canvasIncrementalSync.ts`、`CanvasLayersAndSnapshotsDrawer.tsx`，支持元素级 `op` 增量同步、图层显隐/锁定/排序面板、SQLite 事务历史快照回退，并在 `VideoElement.tsx` 接入 `content-visibility: auto`、`contentvisibilityautostatechange` 与 `IntersectionObserver` 实现视口外视频自动暂停。
 
 ### 阶段 P4：资产库、配音成片合成与大文件拆分治理（M4–M5 & Stage C 尾项）
-- [ ] **跨画布资产与形状模板侧边栏（M1 / E10）**：按提示词、工作流与画布检索历史图片/视频/音频，支持一键拖入当前画布及保存常用标注组合模板。
-- [ ] **脚本卡 TTS 配音与 `ffmpeg` 分镜合成（V3 / V4）**：接入 TTS 工作流/API 实现选中画布文字框一键生成配音卡片，并提供后端 `ffmpeg` 多镜头视频拼接、音轨混音与字幕压制成片工具。
-- [ ] **表格变量批量生成与流程模板化（W1 / W2）**：支持粘贴多行变量/CSV 批量调用工作流并自动按网格排入目标 `Frame`。
-- [ ] **后端超长模块拆分与统一日志（R-17 / R-19）**：按职责拆分超 750 行的 `comfy_workflow_pack.py`、`db_service.py`、`comfyui_router.py`、`llm_adapters.py`，并将残余 `print` 收敛至带脱敏过滤器的标准 `logging`。
+- [x] **跨画布资产与形状模板侧边栏（M1 / E10）**：新增 `studio_router.py`（`/api/studio/assets`、`/api/studio/templates`）与 `CanvasStudioDrawer.tsx`，支持按关键词与媒体类型跨画布检索资产一键入画及插入三镜分镜框组合模板。
+- [x] **脚本卡 TTS 配音与 `ffmpeg` 分镜合成（V3 / V4）**：新增 `video_compose_service.py`、`/api/studio/tts` 与 `/api/studio/compose_video`，在悬浮快捷菜单增加一键配音入口，支持多镜头视频拼接、旁白混音与 SRT 软字幕压制。
+- [x] **表格变量批量生成与流程模板化（W1 / W2）**：实现 CSV/多行变量解析展开接口 `/api/studio/batch_expand` 与工作台批量派发界面。
+- [x] **后端超长模块拆分与统一日志（R-17 / R-19）**：将 `comfy_workflow_pack.py`、`db_service.py`、`comfyui_router.py`、`llm_adapters.py` 拆分为 10 个职责清晰且均不超过 600 行的模块（100% 保留公开导出），并将核心服务中的裸 `print` 收敛至 `get_sanitized_logger`。
 
-### 完成标准
-- 阶段 P1–P4 任一子项落地均需配套后端 `unittest` 或前端 `vitest` 回归用例，保持 `tsc -b && vite build` 与 `git diff --check` 零报错。
-- 实机回归画布验证：多轮对话断网/限流不丢已执行工具消息，`video_upscale_seedvr2_3b` 等含 `LoadVideo` 工作流仅落盘单一成片，Agent 可纯靠聊天指令自动完成分镜框与流转箭头排版。
+### 完成标准与验证结果（2026-11-25 已完成代码与全量自动测试）
+- [x] 阶段 P1–P4 新增 4 个后端单测文件（`test_stage_p1_pipeline_hardening.py`、`test_stage_p2_canvas_tools_and_context.py`、`test_stage_p3_ops_snapshots_lineage.py`、`test_stage_p4_studio_compose_and_splits.py`）与 2 个前端单测文件（`stage-p3-incremental-pdf.test.js`、`stage-p4-studio-and-layers.test.js`）。
+- [x] 后端全量单测：122 项测试全部通过（7.75s）；前端全量 Vitest：24 个测试文件、70 项测试全部通过（1.08s）；前端 `tsc -b && vite build`（4666 个模块，17.50s）与 `git diff --check` 零报错通过。
+- [x] 已按用户指令重启 `57988` 后端进程加载 P1–P4 及内置 FFmpeg 新模块；本轮代码与文档改动尚未执行 `git commit` / `git push`，等待用户确认。
+
+---
+
+## 服务重启验收 + 项目内置 FFmpeg 自动剪辑拼接 + 1 分钟（4×15s）复杂短片全链路实测（2026-11-25 已完成）
+
+### 范围与完成记录
+1. [x] 将 `ffmpeg.exe` 与 `ffprobe.exe` 内置到项目 `server/bin/` 目录（摆脱操作系统 `PATH` 依赖，并在 `.gitignore` 忽略 `server/bin/*.exe` 避免超 100MB 阻塞 GitHub 推送），升级 `video_compose_service.py` 支持按秒裁剪截齐、原生立体声音轨串联、0.25 秒音画柔化转场与血缘记录，新增 `video_edit_and_stitch` 智能体工具并同步工作室面板。
+2. [x] 重启 `57988` 服务并完成 6 项在线实测（内置 `server/bin/ffmpeg.exe` 探测、登录鉴权、画布增量 `/ops` 与快照回退、跨画布资产与模板检索、CSV 变量批量展开、在线 `/api/chat` 调用 `canvas_arrange_elements` 建框与工具消息即时落库）。
+3. [x] 在画布 `film-1min-4x15s-2026`（`https://jaaz.patdelphi.xyz/canvas/film-1min-4x15s-2026`）完成《江南夜雨·一盏江湖》1 分钟（`4 × 15.0s`）四篇章五拍完整分镜排布，并串行生成 4 段完整 15 秒有声视频（`1n8wCYLbMD.mp4`、`7nlR5sICvj.mp4`、`l0YOL01b3x.mp4`、`9Tfcqv9T5t.mp4`，每段实测均为 `15.083s` / `362` 帧 @ `24fps` / `928×512` / `aac` 立体声）。
+4. [x] 通过真实聊天让 Jaaz 智能体自动调用 `video_edit_and_stitch`，将 4 段分镜截齐为 `15.0s × 4` 并拼接生成 **`60.0` 秒整 1 分钟有声总成片** `composed_im_yC4Cbx-G.mp4`（耗时 `30.1s`），完成画布总装连线、血缘记录与声画抽帧核验。
+5. [x] 新增 `file_mapping_service.py`（`GET /api/studio/file_mappings` + UTF-8 BOM + CRLF `file_mappings.csv` 自动双向记录 ComfyUI 与 `H:` 云盘文件）；在 Colab Tesla T4（15GB 显存）上完成 `6 × 10s` 分段 `SeedVR2 3B` `2×` 超分并由内置 `ffmpeg` 合流原 60s 立体声音轨产出 **`1856 × 1024` 全高清终版** `upscaled_x2_60s_master.mp4`（`97.66 MB`）。
