@@ -36,6 +36,47 @@ from services.config_service import (
     merge_masked_secrets,
 )
 from utils.http_client import HttpClient
+from utils.log_sanitizer import get_sanitized_logger, redact_secrets
+
+_logger = get_sanitized_logger(__name__)
+_ANTHROPIC_SYNC_CLIENTS: Dict[Tuple[Optional[str], str, float], anthropic.Anthropic] = {}
+_ANTHROPIC_ASYNC_CLIENTS: Dict[Tuple[int, Optional[str], str, float], anthropic.AsyncAnthropic] = {}
+
+
+def _get_anthropic_sync_client(
+    api_key: str, base_url: Optional[str], timeout: float
+) -> anthropic.Anthropic:
+    key = (base_url, api_key, float(timeout))
+    client = _ANTHROPIC_SYNC_CLIENTS.get(key)
+    if client is None:
+        client = anthropic.Anthropic(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=_MAX_ATTEMPTS,
+        )
+        _ANTHROPIC_SYNC_CLIENTS[key] = client
+    return client
+
+
+def _get_anthropic_async_client(
+    api_key: str, base_url: Optional[str], timeout: float
+) -> anthropic.AsyncAnthropic:
+    try:
+        loop_id = id(asyncio.get_running_loop())
+    except RuntimeError:
+        loop_id = 0
+    key = (loop_id, base_url, api_key, float(timeout))
+    client = _ANTHROPIC_ASYNC_CLIENTS.get(key)
+    if client is None:
+        client = anthropic.AsyncAnthropic(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=_MAX_ATTEMPTS,
+        )
+        _ANTHROPIC_ASYNC_CLIENTS[key] = client
+    return client
 
 _DATA_URI_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.DOTALL)
 
@@ -244,7 +285,30 @@ def parse_anthropic_response(response: Any) -> AIMessage:
                 }
             )
 
-    return AIMessage(content="".join(text_chunks), tool_calls=tool_calls)
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is None and isinstance(response, dict):
+        usage_obj = response.get("usage")
+    usage_meta: Optional[Dict[str, int]] = None
+    if usage_obj is not None:
+        in_tok = getattr(usage_obj, "input_tokens", None)
+        out_tok = getattr(usage_obj, "output_tokens", None)
+        if isinstance(usage_obj, dict):
+            in_tok = usage_obj.get("input_tokens", in_tok)
+            out_tok = usage_obj.get("output_tokens", out_tok)
+        if in_tok is not None or out_tok is not None:
+            it = int(in_tok or 0)
+            ot = int(out_tok or 0)
+            usage_meta = {
+                "input_tokens": it,
+                "output_tokens": ot,
+                "total_tokens": it + ot,
+            }
+
+    return AIMessage(
+        content="".join(text_chunks),
+        tool_calls=tool_calls,
+        usage_metadata=usage_meta,  # type: ignore[arg-type]
+    )
 
 
 def convert_messages_to_gemini(
@@ -339,10 +403,22 @@ def convert_messages_to_gemini(
 
 
 def parse_gemini_response(payload: Dict[str, Any]) -> AIMessage:
-    """解析 Gemini REST generateContent JSON 响应为 LangChain AIMessage。"""
+    """解析 Gemini REST generateContent JSON 响应为 LangChain AIMessage（含 usage_metadata）。"""
+    usage_raw = payload.get("usageMetadata") if isinstance(payload, dict) else None
+    usage_meta: Optional[Dict[str, int]] = None
+    if isinstance(usage_raw, dict):
+        it = int(usage_raw.get("promptTokenCount") or 0)
+        ot = int(usage_raw.get("candidatesTokenCount") or 0)
+        tt = int(usage_raw.get("totalTokenCount") or (it + ot))
+        usage_meta = {
+            "input_tokens": it,
+            "output_tokens": ot,
+            "total_tokens": tt,
+        }
+
     candidates = payload.get("candidates") or []
     if not candidates:
-        return AIMessage(content="")
+        return AIMessage(content="", usage_metadata=usage_meta)  # type: ignore[arg-type]
 
     content_obj = candidates[0].get("content") or {}
     parts = content_obj.get("parts") or []
@@ -365,11 +441,15 @@ def parse_gemini_response(payload: Dict[str, Any]) -> AIMessage:
                 }
             )
 
-    return AIMessage(content="".join(text_chunks), tool_calls=tool_calls)
+    return AIMessage(
+        content="".join(text_chunks),
+        tool_calls=tool_calls,
+        usage_metadata=usage_meta,  # type: ignore[arg-type]
+    )
 
 
 def _ai_message_to_chunk(ai_msg: AIMessage) -> AIMessageChunk:
-    """将完整 AIMessage 转为带 tool_call_chunks 的流式块，兼容 StreamProcessor。"""
+    """将完整 AIMessage 转为带 tool_call_chunks 与 usage_metadata 的流式块，兼容 StreamProcessor。"""
     tool_call_chunks: List[Dict[str, Any]] = []
     for idx, tc in enumerate(ai_msg.tool_calls or []):
         tool_call_chunks.append(
@@ -385,6 +465,7 @@ def _ai_message_to_chunk(ai_msg: AIMessage) -> AIMessageChunk:
         content=ai_msg.content,
         tool_calls=ai_msg.tool_calls or [],
         tool_call_chunks=tool_call_chunks,
+        usage_metadata=getattr(ai_msg, "usage_metadata", None),  # type: ignore[arg-type]
     )
 
 
@@ -462,11 +543,8 @@ class AnthropicNativeChatModel(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        client = anthropic.Anthropic(
-            api_key=self.api_key,
-            base_url=self._normalized_base_url(),
-            timeout=self.timeout,
-            max_retries=_MAX_ATTEMPTS,
+        client = _get_anthropic_sync_client(
+            self.api_key, self._normalized_base_url(), self.timeout
         )
         req = self._build_request_kwargs(messages, stop=stop, **kwargs)
         resp = client.messages.create(**req)
@@ -480,11 +558,8 @@ class AnthropicNativeChatModel(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        client = anthropic.AsyncAnthropic(
-            api_key=self.api_key,
-            base_url=self._normalized_base_url(),
-            timeout=self.timeout,
-            max_retries=_MAX_ATTEMPTS,
+        client = _get_anthropic_async_client(
+            self.api_key, self._normalized_base_url(), self.timeout
         )
         req = self._build_request_kwargs(messages, stop=stop, **kwargs)
         resp = await client.messages.create(**req)
@@ -498,14 +573,11 @@ class AnthropicNativeChatModel(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        # 真流式：文本增量即时输出，工具调用在流结束时一次性给出；流在产出任何内容前失败则回退非流式
+        # 真流式：文本增量即时输出，工具调用与 usage_metadata 在流结束时补齐；流在产出内容前失败则回退非流式
         emitted = False
         try:
-            client = anthropic.AsyncAnthropic(
-                api_key=self.api_key,
-                base_url=self._normalized_base_url(),
-                timeout=self.timeout,
-                max_retries=_MAX_ATTEMPTS,
+            client = _get_anthropic_async_client(
+                self.api_key, self._normalized_base_url(), self.timeout
             )
             req = self._build_request_kwargs(messages, stop=stop, **kwargs)
             async with client.messages.stream(**req) as stream:
@@ -515,7 +587,7 @@ class AnthropicNativeChatModel(BaseChatModel):
                         yield ChatGenerationChunk(message=AIMessageChunk(content=text))
                 final_message = await stream.get_final_message()
             final_ai = parse_anthropic_response(final_message)
-            if final_ai.tool_calls:
+            if final_ai.tool_calls or getattr(final_ai, "usage_metadata", None):
                 tool_chunk = _ai_message_to_chunk(final_ai)
                 tool_chunk.content = ""
                 yield ChatGenerationChunk(message=tool_chunk)
@@ -523,7 +595,11 @@ class AnthropicNativeChatModel(BaseChatModel):
         except Exception as stream_exc:
             if emitted:
                 raise
-            print(f"[llm_adapters] 流式请求失败，回退非流式: {type(stream_exc).__name__}: {stream_exc}")
+            _logger.warning(
+                "Anthropic 流式请求失败，回退非流式: %s: %s",
+                type(stream_exc).__name__,
+                redact_secrets(stream_exc, [self.api_key]),
+            )
 
         result = await self._agenerate(messages, stop=stop, **kwargs)
         msg = result.generations[0].message
@@ -671,12 +747,13 @@ class GeminiNativeChatModel(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        # 真流式（SSE）：文本增量即时输出，functionCall 汇总后在末尾输出；产出内容前失败则回退非流式
+        # 真流式（SSE）：文本增量即时输出，functionCall 与 usage_metadata 在末尾输出；产出内容前失败则回退非流式
         emitted = False
         try:
             payload = self._build_payload(messages, stop=stop, **kwargs)
             url = self._endpoint_url().replace(":generateContent", ":streamGenerateContent")
             tool_calls: List[Dict[str, Any]] = []
+            last_usage: Optional[Dict[str, int]] = None
             async with HttpClient.create(timeout=self.timeout) as client:
                 async with client.stream(
                     "POST", f"{url}?alt=sse", json=payload, headers=self._headers()
@@ -689,19 +766,27 @@ class GeminiNativeChatModel(BaseChatModel):
                         if not raw or raw == "[DONE]":
                             continue
                         part_msg = parse_gemini_response(json.loads(raw))
+                        if getattr(part_msg, "usage_metadata", None):
+                            last_usage = part_msg.usage_metadata  # type: ignore[assignment]
                         text = _extract_text_blocks(part_msg.content)
                         if text:
                             emitted = True
                             yield ChatGenerationChunk(message=AIMessageChunk(content=text))
                         tool_calls.extend(part_msg.tool_calls or [])
-            if tool_calls:
-                tool_chunk = _ai_message_to_chunk(AIMessage(content="", tool_calls=tool_calls))
+            if tool_calls or last_usage:
+                tool_chunk = _ai_message_to_chunk(
+                    AIMessage(content="", tool_calls=tool_calls, usage_metadata=last_usage)  # type: ignore[arg-type]
+                )
                 yield ChatGenerationChunk(message=tool_chunk)
             return
         except Exception as stream_exc:
             if emitted:
                 raise
-            print(f"[llm_adapters] 流式请求失败，回退非流式: {type(stream_exc).__name__}: {stream_exc}")
+            _logger.warning(
+                "Gemini 流式请求失败，回退非流式: %s: %s",
+                type(stream_exc).__name__,
+                redact_secrets(stream_exc, [self.api_key]),
+            )
 
         result = await self._agenerate(messages, stop=stop, **kwargs)
         msg = result.generations[0].message
@@ -770,11 +855,8 @@ def create_chat_model(
 
 
 def _sanitize_error_text(text: str, secret: str) -> str:
-    """在任何错误详情中清除明文 API Key，防止向前端或日志泄漏。"""
-    cleaned = str(text or "")
-    if secret and len(secret) >= 4:
-        cleaned = cleaned.replace(secret, "***")
-    return cleaned
+    """在任何错误详情中清除明文 API Key 与常见凭据，防止向前端或日志泄漏。"""
+    return redact_secrets(text, [secret])
 
 
 async def test_llm_connection(

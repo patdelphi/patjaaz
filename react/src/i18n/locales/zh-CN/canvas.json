@@ -5,6 +5,10 @@
   "share": "分享画布",
   "export": "导出画布",
   "exportImages": "导出",
+  "exportMoreOptions": "更多导出选项",
+  "exportSelectedAssets": "导出选中素材原文件",
+  "exportCanvasPng": "导出画布为 PNG（含视频封面）",
+  "exportCanvasSvg": "导出画布为 SVG（含视频封面）",
   "import": "导入画布",
   "untitled": "未命名",
   "back": "返回",
@@ -57,10 +61,12 @@
     "redo": "重做",
     "zoomIn": "放大",
     "zoomOut": "缩小",
-    "zoomFit": "缩放适应"
+    "zoomFit": "缩放适应",
+    "calloutBadge": "序号标注 (1, 2, 3...)"
   },
   "popbar": {
     "addToChat": "添加到聊天",
+    "quickActions": "AI 动作",
     "magicGenerate": "✨ 魔法生成",
     "textBackground": "文字底色",
     "applyTextBackground": "设置文字底色",

@@ -7,7 +7,7 @@
   "enabled": true,
   "instance_id": "",
   "seed_strategy": "random",
-  "description": "**描述：** 使用单张输入图片作为视频起始首帧，通过 MiniMax H3 FL2VA 生成带原生音频的延续动态视频（24 fps）。\n\n**必填参数：**\n- first_frame_image：必填，视频起始首帧图片文件名（使用 Jaaz 画布或用户上传的实际图片文件名）。\n- positive_prompt：必填，描述从首帧开始的动作演绎、镜头推移、光影变化与声音氛围。\n\n**可选参数：**\n- aspect_ratio：输出画幅比例，必须原样传完整枚举字符串，默认 \"9:16 (Portrait Widescreen)\"（与首帧比例匹配）。\n- megapixels：输出像素档，默认 0.98。\n- duration_seconds：视频时长（秒），默认 5.0。\n- enable_lightning_lora：是否开启 8 步 Turbo LoRA，默认 true（关闭可切至 20 步）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、8 步 Turbo LoRA、Qwen3VL-32B 与音视频双 VAE；仅接入 first_frame，末帧留空。",
+  "description": "**描述：** 使用单张输入图片作为视频起始首帧（`<Picture 1>`），通过 MiniMax H3 FL2VA 生成带原生立体声音频的延续动态视频（24 fps）。\n\n**必填参数：**\n- first_frame_image：必填，视频起始首帧图片文件名（使用 Jaaz 画布或用户上传的实际图片文件名）。\n- positive_prompt：必填，描述从首帧 `<Picture 1>` 开始的动作演绎、镜头推移、光影变化与声音氛围。\n\n**可选参数：**\n- aspect_ratio：输出画幅比例，必须原样传完整枚举字符串，请务必传入与首帧图片一致的比例（默认 \"9:16 (Portrait Widescreen)\"）。\n- megapixels：输出像素档，默认 0.98（官方原生 768p 标准档）。\n- duration_seconds：视频时长（秒），默认 5.0（支持 5.0–15.0）。\n- enable_lightning_lora：是否开启 8 步 FL2V v1.0 Turbo LoRA，默认 true（关闭可切至 20 步完整采样）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、8 步 Turbo LoRA、Qwen3VL-32B 与音视频双 VAE；仅接入 first_frame，末帧留空。",
   "inputs": [
     {
       "name": "first_frame_image",

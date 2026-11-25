@@ -20,7 +20,6 @@ if SERVER_DIR not in sys.path:
 
 with contextlib.redirect_stdout(sys.stderr):
     import asyncio
-    from services.comfy_workflow_ai_importer import auto_import_new_source_workflows
     from services.comfy_workflow_pack import (
         WORKFLOWS_DIR,
         WorkflowPackValidationError,
@@ -33,7 +32,6 @@ with contextlib.redirect_stdout(sys.stderr):
         validate_workflow_pack,
     )
     from services.config_service import USER_DATA_DIR
-    from utils.http_client import HttpClient
 
 DEFAULT_DB_PATH = os.path.join(USER_DATA_DIR, "localmanus.db")
 
@@ -58,6 +56,8 @@ def _fetch_object_info_sync(comfy_url: str) -> Optional[Dict[str, Any]]:
     if not base:
         return None
     try:
+        from utils.http_client import HttpClient
+
         with HttpClient.create_sync(timeout=5.0) as client:
             for endpoint in ("/api/object_info", "/object_info"):
                 resp = client.get(f"{base}{endpoint}")
@@ -269,6 +269,8 @@ def _cmd_sync_source(args: argparse.Namespace) -> int:
     db = _open_db(args.db_path)
     object_info = _fetch_object_info_sync(args.comfy_url) if args.comfy_url else None
     with contextlib.redirect_stdout(sys.stderr):
+        from services.comfy_workflow_ai_importer import auto_import_new_source_workflows
+
         res = asyncio.run(
             auto_import_new_source_workflows(
                 source_dir=source_dir,

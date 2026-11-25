@@ -24,6 +24,7 @@ export type TEvents = {
   'Socket::Session::Info': ISocket.SessionInfoEvent
   'Socket::Session::ImageGenerated': ISocket.SessionImageGeneratedEvent
   'Socket::Session::VideoGenerated': ISocket.SessionVideoGeneratedEvent
+  'Socket::Session::AudioGenerated': ISocket.SessionAudioGeneratedEvent
   'Socket::Session::Delta': ISocket.SessionDeltaEvent
   'Socket::Session::ToolCall': ISocket.SessionToolCallEvent
   'Socket::Session::ToolCallArguments': ISocket.SessionToolCallArgumentsEvent

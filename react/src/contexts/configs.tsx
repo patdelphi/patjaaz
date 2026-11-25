@@ -1,8 +1,8 @@
-import { listModels, ModelInfo, ToolInfo } from '@/api/model'
+import { listModels, ToolInfo } from '@/api/model'
 import useConfigsStore from '@/stores/configs'
 import { filterJaazCloudModels } from '@/lib/communityModels'
 import { useQuery } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect } from 'react'
 
 export const ConfigsContext = createContext<{
   configsStore: typeof useConfigsStore
@@ -21,9 +21,6 @@ export const ConfigsProvider = ({
     setSelectedTools,
     setAllTools,
   } = configsStore
-
-  // 存储上一次的 allTools 值，用于检测新添加的工具，并自动选中
-  const previousAllToolsRef = useRef<ModelInfo[]>([])
 
   const { data: modelList, refetch: refreshModels } = useQuery({
     queryKey: ['list_models_2'],

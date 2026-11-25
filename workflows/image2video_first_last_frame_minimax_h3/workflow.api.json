@@ -31,39 +31,12 @@
   "115": {
     "inputs": {
       "aspect_ratio": "1:1 (Square)",
-      "megapixels": 0.4,
+      "megapixels": 0.98,
       "multiple": 32
     },
     "class_type": "ResolutionSelector",
     "_meta": {
       "title": "分辨率选择器",
-      "cnr_id": "comfy-core",
-      "ver": "0.33.0"
-    }
-  },
-  "119": {
-    "inputs": {
-      "upscale_method": "nearest-exact",
-      "megapixels": 0.9,
-      "resolution_steps": 32
-    },
-    "class_type": "ImageScaleToTotalPixels",
-    "_meta": {
-      "title": "缩放图像（像素）",
-      "cnr_id": "comfy-core",
-      "ver": "0.33.0"
-    }
-  },
-  "120": {
-    "inputs": {
-      "image": [
-        "119",
-        0
-      ]
-    },
-    "class_type": "GetImageSize",
-    "_meta": {
-      "title": "获取图像尺寸",
       "cnr_id": "comfy-core",
       "ver": "0.33.0"
     }
@@ -331,7 +304,7 @@
   },
   "105:111": {
     "inputs": {
-      "value": 5
+      "value": 5.0
     },
     "class_type": "PrimitiveFloat",
     "_meta": {
@@ -424,7 +397,7 @@
   },
   "105:126": {
     "inputs": {
-      "value": false
+      "value": true
     },
     "class_type": "PrimitiveBoolean",
     "_meta": {

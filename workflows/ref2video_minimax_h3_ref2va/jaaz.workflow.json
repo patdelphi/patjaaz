@@ -7,7 +7,7 @@
   "enabled": false,
   "instance_id": "",
   "seed_strategy": "random",
-  "description": "**描述：** 使用 MiniMax H3 Ref2VA 专用参考模型，根据参考图中的角色/主体形象与场景提示词生成带音频视频（24 fps）。\n\n**必填参数：**\n- reference_image：必填，角色/物体/设定参考图文件名（工作流通过 ref_images.ref_image_0 条件引用，保留主体外观一致性）。\n- positive_prompt：必填，分镜脚本与动作描述，可说明如何使用参考图特征以及光影、运镜与音效。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传完整枚举值，默认 \"16:9 (Widescreen)\"。\n- megapixels：像素档，默认 0.98。\n- duration_seconds：视频时长（秒），默认 10.0。\n- enable_lightning_lora：是否启用 Ref2V 4 步 Turbo LoRA，默认 true（true=4 步，false=20 步）。\n\n**模型与备注：** 内置 minimax_h3_ref2va_pruned_int8_convrot 与 minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16。注意：当前导出的 API JSON 仅包含 1 路参考图节点 164，未暴露多帧时间索引参数。",
+  "description": "**描述：** 使用 MiniMax H3 Ref2VA 专用多参考模型，支持 1–4 张参考图（人物、场景、道具）高保真锁定主体一致性并生成带原生音频视频（24 fps）。\n\n**必填参数：**\n- reference_image：必填，第 1 张参考图文件名（`<Picture 1>`）。\n- positive_prompt：必填，分镜动作与音效描述，请用 `<Picture 1>`、`<Picture 2>`、`<Picture 3>`、`<Picture 4>` 按顺序明确指定每张参考图承担的角色/场景/道具。\n\n**可选参数：**\n- reference_image_2 ~ reference_image_4：可选第 2–4 张参考图文件名（留空时自动裁剪，请按顺序填写不跳号）。\n- aspect_ratio：画幅比例完整枚举值，默认 \"16:9 (Widescreen)\"。\n- megapixels：像素档，默认 0.98（官方 768p）。\n- duration_seconds：视频时长（秒），默认 5.0。\n- enable_lightning_lora：默认 false（20 步完整采样；Ref2V 4 步 v0.1 LoRA 画质折损较大，不建议默认开启）。\n\n**模型与固定设置：** 内置 minimax_h3_ref2va_pruned_int8_convrot，采样器 res_multistep + normal 调度器（官方推荐用于多参考条件）。",
   "inputs": [
     {
       "name": "reference_image",
@@ -16,7 +16,7 @@
       "node_id": "164",
       "node_input_name": "image",
       "default_value": "",
-      "description": "必填。参考角色、物品或构图设定图对应的本地或画布图片文件名。"
+      "description": "必填。第 1 张参考图文件名（`<Picture 1>`，如主角人物/主对象）。"
     },
     {
       "name": "positive_prompt",
@@ -25,7 +25,34 @@
       "node_id": "138",
       "node_input_name": "value",
       "default_value": "",
-      "description": "必填。详细动作、分镜、台词与参考图使用规则描述。"
+      "description": "必填。详细动作、分镜、台词音效描述，请用 `<Picture 1>`~`<Picture 4>` 按接入顺序引用各参考图。"
+    },
+    {
+      "name": "reference_image_2",
+      "type": "image",
+      "required": false,
+      "node_id": "165",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 2 张参考图文件名（`<Picture 2>`，如第二角色/场景）；不用请留空。"
+    },
+    {
+      "name": "reference_image_3",
+      "type": "image",
+      "required": false,
+      "node_id": "166",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 3 张参考图文件名（`<Picture 3>`，如环境场景/服饰）；不用请留空。"
+    },
+    {
+      "name": "reference_image_4",
+      "type": "image",
+      "required": false,
+      "node_id": "167",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 4 张参考图文件名（`<Picture 4>`，如关键道具）；不用请留空。"
     },
     {
       "name": "aspect_ratio",
@@ -34,7 +61,7 @@
       "node_id": "115",
       "node_input_name": "aspect_ratio",
       "default_value": "16:9 (Widescreen)",
-      "description": "可选。输出画面比例，必须原样传 Allowed options 中的完整字符串之一（不可简写）；默认 \"16:9 (Widescreen)\"。",
+      "description": "可选。输出画面比例，必须原样传 Allowed options 中的完整字符串之一；默认 \"16:9 (Widescreen)\"。",
       "options": [
         "1:1 (Square)",
         "2:3 (Portrait Photo)",
@@ -53,7 +80,7 @@
       "node_id": "115",
       "node_input_name": "megapixels",
       "default_value": 0.98,
-      "description": "可选。输出分辨率像素档位（单位百万像素 MP），视频推荐 0.4–0.98，默认 0.98。"
+      "description": "可选。输出分辨率像素档位（单位 MP），默认 0.98（官方原生 768p）。"
     },
     {
       "name": "duration_seconds",
@@ -61,8 +88,8 @@
       "required": false,
       "node_id": "132",
       "node_input_name": "value",
-      "default_value": 10.0,
-      "description": "可选。生成视频时长（秒），默认 10.0。"
+      "default_value": 5.0,
+      "description": "可选。生成视频时长（秒），默认 5.0（支持 5.0–15.0）。"
     },
     {
       "name": "enable_lightning_lora",
@@ -70,8 +97,8 @@
       "required": false,
       "node_id": "146",
       "node_input_name": "value",
-      "default_value": true,
-      "description": "可选。true 启用 Ref2V 4 步 Lightning LoRA，false 为 20 步完整采样；默认 true。"
+      "default_value": false,
+      "description": "可选。默认 false 使用 20 步高保真采样（官方说明指出 Ref2V 4 步 v0.1 LoRA 会明显降低画质与人物还原度，仅快速草稿预览时设为 true）。"
     }
   ],
   "outputs": null,

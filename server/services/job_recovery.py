@@ -13,7 +13,10 @@ from services.db_service import db_service
 from services.websocket_service import broadcast_session_update
 from tools.utils.comfyui import download_outputs
 from tools.utils.image_canvas_utils import generate_file_id, generate_new_image_element
-from tools.video_generation.video_canvas_utils import generate_new_video_element
+from tools.video_generation.video_canvas_utils import (
+    generate_new_audio_element,
+    generate_new_video_element,
+)
 from utils.canvas_lock import canvas_lock_manager
 from utils.comfyui_history import history_output_urls
 from utils.http_client import HttpClient
@@ -61,6 +64,10 @@ async def append_outputs_to_canvas(
                 element = await generate_new_video_element(
                     canvas_id, file_id, {**size, "url": url}, canvas_data=data
                 )
+            elif mime_type.startswith("audio"):
+                element = await generate_new_audio_element(
+                    canvas_id, file_id, {"width": 360, "height": 108, "url": url}, canvas_data=data
+                )
             if element is None:
                 continue
             data["elements"].append(element)
@@ -74,7 +81,12 @@ async def append_outputs_to_canvas(
 
     # 客户端此刻在线时即时刷新；不在线则下次打开画布从数据库读取
     for item in added:
-        kind = "image" if item["mime"].startswith("image") else "video"
+        if item["mime"].startswith("image"):
+            kind = "image"
+        elif item["mime"].startswith("audio"):
+            kind = "audio"
+        else:
+            kind = "video"
         try:
             await broadcast_session_update(
                 session_id,

@@ -84,14 +84,20 @@ def build_canvas_scene_context(canvas_data: Optional[Dict[str, Any]]) -> str:
         elif etype == "frame":
             fname = str(elem.get("name") or elem.get("id") or "Frame")
             frame_lines.append(f"- 画框 \"{fname}\" @(x={x}, y={y}, {w}×{h})")
-        elif etype in ("image", "video", "embeddable"):
+        elif etype in ("image", "video", "audio", "embeddable"):
             if len(media_lines) >= MAX_MEDIA_ITEMS:
                 continue
             fid = str(elem.get("fileId") or elem.get("id") or "")
             real_name = _extract_filename_from_file_entry(files_map.get(fid)) or _extract_filename_from_url(elem.get("link"))
             if not real_name:
                 continue
-            kind_cn = "图像" if etype == "image" else "视频"
+            lower_name = real_name.lower()
+            if etype == "image":
+                kind_cn = "图像"
+            elif etype == "audio" or lower_name.endswith((".mp3", ".wav", ".flac", ".m4a", ".aac")):
+                kind_cn = "音频"
+            else:
+                kind_cn = "视频"
             media_lines.append(
                 f"- 画布{kind_cn}#{len(media_lines) + 1}: file_id=\"{real_name}\" ({w}×{h}, @(x={x}, y={y}))"
             )

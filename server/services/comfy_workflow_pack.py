@@ -605,9 +605,48 @@ def _load_json_pair(
     }, None
 
 
+_SCAN_WORKFLOWS_CACHE: Dict[str, Tuple[Tuple[Any, ...], Dict[str, Any]]] = {}
+_SCAN_SOURCE_CACHE: Dict[str, Tuple[Tuple[Any, ...], Dict[str, Any]]] = {}
+
+
+def _compute_dir_signature(root_dir: str, include_subdirs: bool = True) -> Tuple[Any, ...]:
+    """基于文件相对路径、字节数与 mtime_ns 计算轻量目录指纹，未变更时跳过重复 JSON 解析与 SHA-256。"""
+    if not os.path.isdir(root_dir):
+        return ()
+    items: List[Tuple[str, int, int]] = []
+    for entry in sorted(os.listdir(root_dir)):
+        if entry.startswith("."):
+            continue
+        full = os.path.join(root_dir, entry)
+        try:
+            st = os.stat(full)
+        except OSError:
+            continue
+        if os.path.isfile(full):
+            items.append((entry, st.st_size, st.st_mtime_ns))
+        elif include_subdirs and os.path.isdir(full) and entry not in RESERVED_WORKFLOW_SUBDIRS:
+            for sub in sorted(os.listdir(full)):
+                if sub.startswith("."):
+                    continue
+                sub_full = os.path.join(full, sub)
+                try:
+                    sub_st = os.stat(sub_full)
+                except OSError:
+                    continue
+                if os.path.isfile(sub_full):
+                    items.append((f"{entry}/{sub}", sub_st.st_size, sub_st.st_mtime_ns))
+    return tuple(items)
+
+
 def scan_workflows_dir(workflows_dir: str = WORKFLOWS_DIR) -> Dict[str, Any]:
-    """扫描项目 workflows/ 目录下的所有子目录包与平铺成对文件，并逐一校验。"""
+    """扫描项目 workflows/ 目录下的所有子目录包与平铺成对文件，并按 mtime 缓存避免重复磁盘校验。"""
     os.makedirs(workflows_dir, exist_ok=True)
+    abs_dir = os.path.abspath(workflows_dir)
+    sig = _compute_dir_signature(abs_dir, include_subdirs=True)
+    cached = _SCAN_WORKFLOWS_CACHE.get(abs_dir)
+    if cached is not None and cached[0] == sig:
+        return copy.deepcopy(cached[1])
+
     valid_packs: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
 
@@ -677,11 +716,13 @@ def scan_workflows_dir(workflows_dir: str = WORKFLOWS_DIR) -> Dict[str, Any]:
         if err:
             errors.append(err)
 
-    return {
+    scan_res = {
         "workflows_dir": workflows_dir,
         "valid": valid_packs,
         "errors": errors,
     }
+    _SCAN_WORKFLOWS_CACHE[abs_dir] = (sig, copy.deepcopy(scan_res))
+    return scan_res
 
 
 def _truncate_summary_value(value: Any) -> Any:
@@ -1138,7 +1179,7 @@ def scan_source_workflows_dir(
     source_dir: str = SOURCE_WORKFLOWS_DIR,
     workflows_dir: str = WORKFLOWS_DIR,
 ) -> Dict[str, Any]:
-    """扫描 workflows/source/ 下的原始 API JSON，识别新增、已导入、已更新和无效文件。"""
+    """扫描 workflows/source/ 下的原始 API JSON，识别新增、已导入、已更新和无效文件（带 mtime 缓存）。"""
     result: Dict[str, Any] = {
         "source_dir": source_dir,
         "new": [],
@@ -1148,6 +1189,15 @@ def scan_source_workflows_dir(
     }
     if not os.path.isdir(source_dir):
         return result
+
+    cache_key = f"{os.path.abspath(source_dir)}|{os.path.abspath(workflows_dir)}"
+    combined_sig = (
+        _compute_dir_signature(source_dir, include_subdirs=False),
+        _compute_dir_signature(workflows_dir, include_subdirs=True),
+    )
+    cached_src = _SCAN_SOURCE_CACHE.get(cache_key)
+    if cached_src is not None and cached_src[0] == combined_sig:
+        return copy.deepcopy(cached_src[1])
 
     existing_packs = scan_workflows_dir(workflows_dir).get("valid", [])
     known_source_hashes: set[str] = set()
@@ -1269,4 +1319,5 @@ def scan_source_workflows_dir(
         else:
             result["new"].append(item)
 
+    _SCAN_SOURCE_CACHE[cache_key] = (combined_sig, copy.deepcopy(result))
     return result

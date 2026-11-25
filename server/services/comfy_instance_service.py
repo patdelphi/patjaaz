@@ -147,6 +147,18 @@ class ComfyInstanceService:
         while len(self._upload_cache) > self._max_upload_cache:
             self._upload_cache.popitem(last=False)
 
+    def invalidate_cached_upload(
+        self, instance_key: str, sha256_hex: Optional[str] = None
+    ) -> int:
+        """失效远端重启清空 input/ 后的过期上传缓存；未指定 sha256 时清空该实例全部条目。"""
+        inst = instance_key or "default"
+        if sha256_hex is not None:
+            return 1 if self._upload_cache.pop((inst, sha256_hex), None) is not None else 0
+        keys = [k for k in self._upload_cache if k[0] == inst]
+        for k in keys:
+            self._upload_cache.pop(k, None)
+        return len(keys)
+
     def register_active_prompt(
         self,
         session_id: Optional[str],

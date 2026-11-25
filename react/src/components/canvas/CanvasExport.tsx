@@ -1,11 +1,20 @@
+/** 程序说明：画布顶部导出按钮组，支持选中图片/视频/音频原始文件打包下载，以及整张画布或选区导出为合成视频封面帧的 PNG/SVG。 */
 import { useCanvas } from '@/contexts/canvas'
+import { buildExportableSceneWithVideoPosters } from '@/lib/canvasExportComposite'
+import { extractApiFilename, isAudioUrl } from '@/lib/canvasMediaNormalize'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
-import { ImageDown } from 'lucide-react'
+import { ChevronDown, FileCode2, FileImage, ImageDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '../ui/button'
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu'
 
 const CanvasExport = () => {
   const { excalidrawAPI } = useCanvas()
@@ -13,6 +22,7 @@ const CanvasExport = () => {
 
   const downloadImage = async (imageUrl: string): Promise<string> => {
     const image = new Image()
+    image.crossOrigin = 'anonymous'
     image.src = imageUrl
     return new Promise((resolve, reject) => {
       image.onload = () => {
@@ -30,7 +40,7 @@ const CanvasExport = () => {
     })
   }
 
-  const handleExportImages = async () => {
+  const handleExportSelectedAssets = async () => {
     if (!excalidrawAPI) return
     const toastId = toast.loading(t('canvas:messages.exportingAssets'))
     try {
@@ -41,83 +51,71 @@ const CanvasExport = () => {
         (id) => appState.selectedElementIds[id]
       )
 
-      const images = elements.filter(
+      const mediaElements = elements.filter(
         (element) =>
-          selectedIds.includes(element.id) && 
+          selectedIds.includes(element.id) &&
           (element.type === 'image' || element.type === 'embeddable')
       )
 
-      if (images.length === 0) {
+      if (mediaElements.length === 0) {
         toast.error(t('canvas:messages.nothingSelected'))
         return
       }
 
       const files = excalidrawAPI.getFiles()
+      const embeddableElements = mediaElements.filter((el) => el.type === 'embeddable')
+      const imageElements = mediaElements.filter((el) => el.type === 'image')
 
-      // Separate embeddable elements (videos) and regular images
-      const embeddableElements = images.filter(element => element.type === 'embeddable')
-      const imageElements = images.filter(element => element.type === 'image')
+      const embedUrls = embeddableElements
+        .map((el) => ('link' in el && typeof el.link === 'string' && el.link ? el.link : null))
+        .filter((url): url is string => url !== null)
 
-      // Get video URLs from embeddable elements
-      const videoUrls = embeddableElements
-        .map((element) => {
-          if ('link' in element && element.link) {
-            return element.link
-          }
-          return null
-        })
-        .filter((url) => url !== null)
-
-      // Get image URLs from regular image elements
       const imageUrls = imageElements
-        .map((element) => {
-          if ('fileId' in element && element.fileId) {
-            const file = files[element.fileId]
-            return file?.dataURL
+        .map((el) => {
+          if ('fileId' in el && el.fileId) {
+            const raw = files[el.fileId]?.dataURL
+            return raw ? String(raw) : null
           }
           return null
         })
-        .filter((url) => url !== null)
+        .filter((url): url is string => url !== null)
 
-      if (imageUrls.length === 0 && videoUrls.length === 0) {
+      if (imageUrls.length === 0 && embedUrls.length === 0) {
         toast.error(t('canvas:messages.nothingSelected'))
         return
       }
-      
-      // Generate random ID for the asset package
-      const randomId = Math.random().toString(36).substring(2, 15)
-      const packageName = `Asset-${randomId}.zip`
 
-      // If only one image and no videos, save directly
-      if (imageUrls.length === 1 && videoUrls.length === 0) {
-        const imageUrl = imageUrls[0]
-        const dataURL = await downloadImage(imageUrl)
+      const randomId = Math.random().toString(36).substring(2, 10)
+
+      if (imageUrls.length === 1 && embedUrls.length === 0) {
+        const dataURL = await downloadImage(imageUrls[0])
         saveAs(dataURL, `Asset-${randomId}.png`)
         return
       }
 
-      // If only one video and no images, save directly
-      if (videoUrls.length === 1 && imageUrls.length === 0) {
-        const videoUrl = videoUrls[0]
-        const response = await fetch(videoUrl)
+      if (embedUrls.length === 1 && imageUrls.length === 0) {
+        const targetUrl = embedUrls[0]
+        const response = await fetch(targetUrl)
         const blob = await response.blob()
-        saveAs(blob, `Asset-${randomId}.mp4`)
+        const fallbackExt = isAudioUrl(targetUrl) ? 'wav' : 'mp4'
+        const fileName = extractApiFilename(targetUrl) || `Asset-${randomId}.${fallbackExt}`
+        saveAs(blob, fileName)
         return
       }
 
-      // Create a zip package for multiple assets or mixed types
       const zip = new JSZip()
-      
-      // Add videos to zip
       await Promise.all(
-        videoUrls.map(async (videoUrl, index) => {
-          const response = await fetch(videoUrl)
+        embedUrls.map(async (mediaUrl, index) => {
+          const response = await fetch(mediaUrl)
           const blob = await response.blob()
-          zip.file(`video-${index + 1}.mp4`, blob)
+          const fallbackExt = isAudioUrl(mediaUrl) ? 'wav' : 'mp4'
+          const kindPrefix = isAudioUrl(mediaUrl) ? 'audio' : 'video'
+          const origName = extractApiFilename(mediaUrl)
+          const ext = origName?.split('.').pop() || fallbackExt
+          zip.file(`${kindPrefix}-${index + 1}.${ext}`, blob)
         })
       )
 
-      // Add images to zip
       await Promise.all(
         imageUrls.map(async (imageUrl, index) => {
           const dataURL = await downloadImage(imageUrl)
@@ -132,8 +130,8 @@ const CanvasExport = () => {
       )
 
       const content = await zip.generateAsync({ type: 'blob' })
-      saveAs(content, packageName)
-    } catch (error) {
+      saveAs(content, `Asset-${randomId}.zip`)
+    } catch {
       toast.error(t('canvas:messages.failedToExportImages'), {
         id: toastId,
       })
@@ -142,16 +140,106 @@ const CanvasExport = () => {
     }
   }
 
+  const handleExportWholeCanvas = async (format: 'png' | 'svg') => {
+    if (!excalidrawAPI) return
+    const toastId = toast.loading(t('canvas:messages.exportingAssets'))
+    try {
+      const appState = excalidrawAPI.getAppState()
+      const allElements = excalidrawAPI.getSceneElements()
+      const activeElements = allElements.filter((el) => !el.isDeleted)
+      if (activeElements.length === 0) {
+        toast.error(t('canvas:messages.nothingSelected'))
+        return
+      }
+
+      // 若当前有选中元素则优先导出选中分镜区域，未选中时导出整张画布
+      const selectedIds = Object.keys(appState.selectedElementIds || {}).filter(
+        (id) => appState.selectedElementIds[id]
+      )
+      const targetElements =
+        selectedIds.length > 0
+          ? activeElements.filter((el) => selectedIds.includes(el.id))
+          : activeElements
+
+      const composite = await buildExportableSceneWithVideoPosters(
+        targetElements,
+        excalidrawAPI.getFiles()
+      )
+      const excalidrawModule = await import('@excalidraw/excalidraw')
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+
+      if (format === 'png') {
+        const blob = await excalidrawModule.exportToBlob({
+          elements: composite.elements,
+          appState: {
+            ...appState,
+            exportBackground: true,
+            exportWithDarkMode: false,
+          },
+          files: composite.files,
+          mimeType: 'image/png',
+        })
+        saveAs(blob, `Canvas-${stamp}.png`)
+      } else {
+        const svgElement = await excalidrawModule.exportToSvg({
+          elements: composite.elements,
+          appState: {
+            ...appState,
+            exportBackground: true,
+            exportWithDarkMode: false,
+          },
+          files: composite.files,
+        })
+        const serializer = new XMLSerializer()
+        const svgMarkup = serializer.serializeToString(svgElement)
+        const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
+        saveAs(svgBlob, `Canvas-${stamp}.svg`)
+      }
+      toast.success(t('canvas:messages.canvasExported'))
+    } catch (err) {
+      console.error('Failed to export canvas:', err)
+      toast.error(t('canvas:messages.failedToExportImages'), { id: toastId })
+    } finally {
+      toast.dismiss(toastId)
+    }
+  }
+
   return (
     <div className="inline-flex -space-x-px rounded-md shadow-xs rtl:space-x-reverse">
       <Button
-        className="rounded-none shadow-none first:rounded-s-md last:rounded-e-md h-8"
+        className="rounded-none shadow-none first:rounded-s-md h-8"
         variant="outline"
-        onClick={handleExportImages}
+        onClick={handleExportSelectedAssets}
       >
-        <ImageDown />
+        <ImageDown className="size-4" aria-hidden="true" />
         {t('canvas:exportImages')}
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className="rounded-none shadow-none last:rounded-e-md h-8 px-2"
+            variant="outline"
+            aria-label={t('canvas:exportMoreOptions', { defaultValue: 'Export options' })}
+          >
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleExportSelectedAssets}>
+            <ImageDown className="mr-2 size-4" aria-hidden="true" />
+            {t('canvas:exportSelectedAssets', { defaultValue: '导出选中素材原文件' })}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => void handleExportWholeCanvas('png')}>
+            <FileImage className="mr-2 size-4" aria-hidden="true" />
+            {t('canvas:exportCanvasPng', { defaultValue: '导出画布为 PNG（含视频封面）' })}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleExportWholeCanvas('svg')}>
+            <FileCode2 className="mr-2 size-4" aria-hidden="true" />
+            {t('canvas:exportCanvasSvg', { defaultValue: '导出画布为 SVG（含视频封面）' })}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

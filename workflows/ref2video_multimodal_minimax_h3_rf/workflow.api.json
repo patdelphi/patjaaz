@@ -34,7 +34,7 @@
   },
   "4": {
     "inputs": {
-      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
@@ -70,7 +70,7 @@
   },
   "7": {
     "inputs": {
-      "value": 15
+      "value": 5
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -80,11 +80,11 @@
   },
   "8": {
     "inputs": {
-      "value": 24
+      "value": 24.0
     },
-    "class_type": "PrimitiveInt",
+    "class_type": "PrimitiveFloat",
     "_meta": {
-      "title": "Repaired Primitive (8)",
+      "title": "FPS",
       "cnr_id": "comfy-core"
     }
   },
@@ -235,9 +235,9 @@
   },
   "22": {
     "inputs": {
-      "reuse_threshold": 0.20000000000000004,
-      "start_percent": 0.15000000000000002,
-      "end_percent": 0.9000000000000001,
+      "reuse_threshold": 0.15,
+      "start_percent": 0.2,
+      "end_percent": 0.9,
       "verbose": false,
       "model": [
         "4",
@@ -253,7 +253,7 @@
   },
   "23": {
     "inputs": {
-      "scheduler": "simple",
+      "scheduler": "normal",
       "steps": 25,
       "denoise": 1,
       "model": [
@@ -426,7 +426,7 @@
   "31": {
     "inputs": {
       "fps": [
-        "33",
+        "8",
         0
       ],
       "bit_depth": 8,
@@ -465,20 +465,6 @@
       "title": "保存视频",
       "cnr_id": "comfy-core",
       "ver": "0.45.0"
-    }
-  },
-  "33": {
-    "inputs": {
-      "int": [
-        "8",
-        0
-      ]
-    },
-    "class_type": "intToFloat _O",
-    "_meta": {
-      "title": "intToFloat _O",
-      "aux_id": "omar92/ComfyUI-QualityOfLifeSuit_Omar92",
-      "ver": "793b6d27e9e501e56aeb630cb502462bc0af9fed"
     }
   },
   "34": {

@@ -15,16 +15,22 @@ import {
 import { useCanvas } from '@/contexts/canvas'
 import { useExcalidrawChange } from '@/hooks/use-excalidraw-change'
 import { BlockArrowVariant, createBlockArrowElement } from '@/lib/blockArrow'
+import {
+  createCalloutBadgeSkeletons,
+  getNextCalloutNumber,
+} from '@/lib/calloutBadge'
 import { CAPTURE_UPDATE_IMMEDIATELY } from '@/lib/excalidrawMutation'
 import { cn } from '@/lib/utils'
+import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import {
   ArrowLeftRight,
   ChevronDown,
   CornerUpRight,
+  ListOrdered,
   MoveRight,
   Wrench,
 } from 'lucide-react'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import CanvasMenuButton from './CanvasMenuButton'
 import icons, { toolShortcuts, ToolType } from './CanvasMenuIcon'
@@ -44,6 +50,35 @@ const CanvasToolMenu = () => {
       setLastShapeTool(tool)
     }
     excalidrawAPI?.setActiveTool({ type: tool })
+  }
+
+  const handleInsertCalloutBadge = () => {
+    if (!excalidrawAPI) return
+    const appState = excalidrawAPI.getAppState()
+    const currentElements = excalidrawAPI.getSceneElements()
+    const zoom = appState.zoom.value || 1
+    const centerX = -appState.scrollX + appState.width / (2 * zoom)
+    const centerY = -appState.scrollY + appState.height / (2 * zoom)
+    const nextNumber = getNextCalloutNumber(currentElements)
+    // 连续插入时按编号轻微错开坐标，避免多个角标完全重叠
+    const jitterOffset = ((nextNumber - 1) % 6) * 24
+    const skeletons = createCalloutBadgeSkeletons(
+      nextNumber,
+      centerX + jitterOffset,
+      centerY + jitterOffset
+    )
+    const badgeElements = convertToExcalidrawElements(skeletons)
+    const selectedMap: Record<string, true> = {}
+    for (const item of badgeElements) {
+      selectedMap[item.id] = true
+    }
+    excalidrawAPI.updateScene({
+      elements: [...currentElements, ...badgeElements],
+      appState: {
+        selectedElementIds: selectedMap,
+      },
+      captureUpdate: CAPTURE_UPDATE_IMMEDIATELY,
+    })
   }
 
   const handleInsertBlockArrow = (variant: BlockArrowVariant) => {
@@ -217,6 +252,22 @@ const CanvasToolMenu = () => {
         activeTool={activeTool}
         onClick={() => handleToolChange('image')}
       />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('canvas:tool.calloutBadge', { defaultValue: '序号标注' })}
+            className="size-9 rounded-md cursor-pointer hover:bg-primary/5"
+            onClick={handleInsertCalloutBadge}
+          >
+            <ListOrdered className="size-4" aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {t('canvas:tool.calloutBadge', { defaultValue: '自动递增序号标注 (1, 2, 3...)' })}
+        </TooltipContent>
+      </Tooltip>
 
       <Separator orientation="vertical" className="h-6! bg-primary/5" />
 

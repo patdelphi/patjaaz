@@ -18,9 +18,7 @@ import {
   Heart,
   MoreHorizontal,
   ExternalLink,
-  Info,
   X,
-  MessageCirclePlus,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -34,7 +32,6 @@ import { readPNGMetadata } from '@/utils/pngMetadata'
 import FilePreviewModal from './FilePreviewModal'
 import { Button } from '../ui/button'
 import { eventBus } from '@/lib/event'
-import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 
 interface FileSystemItem {
@@ -203,7 +200,6 @@ function ImageModelBadge({
 
 export default function MaterialManager() {
   const [currentPath, setCurrentPath] = useState<string>('')
-  const [pathHistory, setPathHistory] = useState<string[]>([])
   const [items, setItems] = useState<FileSystemItem[]>([])
   const [mediaFiles, setMediaFiles] = useState<FileSystemItem[]>([])
   const [selectedFolder, setSelectedFolder] = useState<FileSystemItem | null>(
@@ -213,7 +209,7 @@ export default function MaterialManager() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm] = useState('')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [folderContents, setFolderContents] = useState<
     Map<string, FileSystemItem[]>

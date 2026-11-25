@@ -1,6 +1,7 @@
 /** 程序说明：画布主路由页，负责加载画布数据并在加载失败时提供可见错误提示与重试操作。 */
 import { getCanvas, renameCanvas } from '@/api/canvas'
 import CanvasExcali from '@/components/canvas/CanvasExcali'
+import CanvasGenerationOverlay from '@/components/canvas/CanvasGenerationOverlay'
 import CanvasHeader from '@/components/canvas/CanvasHeader'
 import CanvasMenu from '@/components/canvas/menu'
 import CanvasPopbarWrapper from '@/components/canvas/pop-bar'
@@ -108,6 +109,7 @@ function Canvas() {
               ) : (
                 <div className='relative w-full h-full'>
                   <CanvasExcali canvasId={id} initialData={canvas?.data} />
+                  <CanvasGenerationOverlay canvasId={id} />
                   <CanvasMenu />
                   <CanvasPopbarWrapper />
                 </div>

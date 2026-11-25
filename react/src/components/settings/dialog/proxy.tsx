@@ -19,7 +19,6 @@ const SettingProxy = () => {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [testing, setTesting] = useState(false)
   const [proxyConfig, setProxyConfig] = useState<ProxyConfig>({
     mode: 'system',
     url: ''

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "name": "image_edit_sensenova_u16",
+  "display_name": "SenseNova U1.6 图像编辑",
+  "capability": "i2i",
+  "output_kind": "image",
+  "enabled": true,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用 SenseNova-U1.6 8B 统一多模态模型基于单张底图执行指令级图像编辑（自动保持原图画幅比例，内置多模态 PE 同时读取底图与编辑指令，支持文字编辑自检修正）。\n\n**必填参数：**\n- source_image：必填，待编辑底图文件名（必须传 Jaaz 画布或用户上传的实际图片文件名）。\n- edit_instruction：必填，描述需要修改的内容以及需要保留的人物身份、构图、背景或文字（替换文字时请用引号写明原文字与新文字）。\n\n**可选参数与模式选择规则：**\n- megapixels：底图预处理与输出像素档，默认 4.0（模型原生训练分辨率 4.0 MP，自动保持原图宽高比）。\n- turbo_mode：是否启用 8 步 Turbo LoRA（8 步 CFG 1.0 vs 关闭时 50 步 CFG 4.0），默认 true；涉及精细文字重排时建议设为 false。\n- self_correction：是否启用编辑→自检→重绘循环（最多 5 轮），默认 false；修改海报/图表文字时建议设为 true，普通光影、色彩、材质、服饰修改保持 false。\n- enable_prompt_enhancer：是否启用内置 Qwen3.5-9B I2I 多模态提示词扩写（同时读取底图与指令），默认 true。\n\n**模型与备注：** 单图编辑优先可选本工具（尤其含文字修改或细节保持）；需要同时融合 2–3 张不同参考图时请选用 image_edit_multiref_minimax_h3。",
+  "inputs": [
+    {
+      "name": "source_image",
+      "type": "image",
+      "required": true,
+      "node_id": "79",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。待编辑底图对应的本地或画布图片文件名，禁止传入示例图名。"
+    },
+    {
+      "name": "edit_instruction",
+      "type": "string",
+      "required": true,
+      "node_id": "64",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。图像编辑指令（中英文均可，说明改动点与需保留的画面特征）。"
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "80",
+      "node_input_name": "resize_type.megapixels",
+      "default_value": 4.0,
+      "description": "可选。参考底图与输出像素档位（单位 MP），默认 4.0（保持原图宽高比）。"
+    },
+    {
+      "name": "turbo_mode",
+      "type": "boolean",
+      "required": false,
+      "node_id": "34",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。true 启用 8 步 Turbo LoRA（CFG 1.0）；false 启用 50 步 Quality 模式（CFG 4.0）；默认 true。"
+    },
+    {
+      "name": "self_correction",
+      "type": "boolean",
+      "required": false,
+      "node_id": "75",
+      "node_input_name": "value",
+      "default_value": false,
+      "description": "可选。true 开启编辑自检循环（适合海报/图表文字修改）；普通光影服饰编辑保持默认 false。"
+    },
+    {
+      "name": "enable_prompt_enhancer",
+      "type": "boolean",
+      "required": false,
+      "node_id": "60",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。是否启用内置 Qwen3.5-9B I2I 视觉提示词扩写器，默认 true。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "图片编辑_Sensenova_u16_image_edit.json",
+  "source_sha256": "3bbc90aa8e5dc4e28165ece0021ef48bb438896c3ed2b8e1045642bfd62554a1"
+}

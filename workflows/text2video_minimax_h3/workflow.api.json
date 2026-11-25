@@ -20,7 +20,7 @@
   "115": {
     "inputs": {
       "aspect_ratio": "16:9 (Widescreen)",
-      "megapixels": 0.4,
+      "megapixels": 0.98,
       "multiple": 32
     },
     "class_type": "ResolutionSelector",
@@ -274,7 +274,7 @@
   },
   "140:133": {
     "inputs": {
-      "value": 15
+      "value": 5.0
     },
     "class_type": "PrimitiveFloat",
     "_meta": {
@@ -367,7 +367,7 @@
   },
   "140:139": {
     "inputs": {
-      "value": false
+      "value": true
     },
     "class_type": "PrimitiveBoolean",
     "_meta": {

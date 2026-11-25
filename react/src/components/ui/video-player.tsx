@@ -34,7 +34,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
     const [duration, setDuration] = useState(0)
-    const [volume, setVolume] = useState(1)
+    const [volume] = useState(1)
     const [isMuted, setIsMuted] = useState(muted)
     const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -85,25 +85,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         } else {
             video.play()
         }
-    }
-
-    const handleSeek = (values: number[]) => {
-        const video = videoRef.current
-        if (!video) return
-
-        const newTime = values[0]
-        video.currentTime = newTime
-        setCurrentTime(newTime)
-    }
-
-    const handleVolumeChange = (values: number[]) => {
-        const video = videoRef.current
-        if (!video) return
-
-        const newVolume = values[0]
-        video.volume = newVolume
-        setVolume(newVolume)
-        setIsMuted(newVolume === 0)
     }
 
     const toggleMute = () => {

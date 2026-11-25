@@ -78,6 +78,34 @@ export default defineConfig(({ mode }) => {
         },
       },
     }
+  } else {
+    // 应用模式按重型依赖做代码分包，降低首屏核心 chunk 体积
+    config.build = {
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined
+            if (id.includes('mermaid') || id.includes('cytoscape') || id.includes('dagre') || id.includes('d3-')) {
+              return 'diagram-vendor'
+            }
+            if (id.includes('@excalidraw')) {
+              return 'excalidraw-vendor'
+            }
+            if (id.includes('@mdxeditor') || id.includes('lexical') || id.includes('prismjs') || id.includes('codemirror')) {
+              return 'editor-vendor'
+            }
+            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('sonner')) {
+              return 'ui-vendor'
+            }
+            if (id.includes('@tanstack') || id.includes('motion') || id.includes('framer-motion') || id.includes('i18next')) {
+              return 'app-framework-vendor'
+            }
+            return undefined
+          },
+        },
+      },
+    }
   }
 
   // Configure server based on environment

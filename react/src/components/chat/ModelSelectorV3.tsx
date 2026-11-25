@@ -1,10 +1,8 @@
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, Component } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
@@ -76,7 +74,6 @@ const ModelSelectorV3: React.FC<ModelSelectorV3Props> = ({
   }
 
   const groupedLLMs = sortProviders(groupLLMsByProvider(textModels))
-  const groupedTools = groupModelsByProvider(allTools)
 
   // Filter tools by type
   const getToolsByType = (type: 'image' | 'video' | 'audio') => {
@@ -189,15 +186,6 @@ const ModelSelectorV3: React.FC<ModelSelectorV3Props> = ({
     }
     setAutoMode(enabled)
     onAutoToggle?.(enabled)
-  }
-
-  // Get selected models count
-  const getSelectedModelsCount = () => {
-    if (activeTab === 'text') {
-      return textModel ? 1 : 0
-    } else {
-      return selectedTools.length
-    }
   }
 
   // Get current models based on active tab

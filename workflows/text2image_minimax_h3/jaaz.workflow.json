@@ -7,7 +7,7 @@
   "enabled": true,
   "instance_id": "",
   "seed_strategy": "random",
-  "description": "**描述：** 使用 MiniMax H3 Image 扩散模型根据文字提示词从零生成单张高画质图像（无参考图输入端口）。\n\n**必填参数：**\n- positive_prompt：正向画面内容、排版、风格与文字要求描述（中英文均可）；开启提示词增强时将先交由内置 Qwen3.5 9B 润色扩展。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传 ResolutionSelector 枚举值（例如 \"3:4 (Portrait Standard)\"、\"16:9 (Widescreen)\"），默认为 \"3:4 (Portrait Standard)\"。\n- megapixels：输出像素档，默认 16.0（可按需调小如 4.0 或 1.0）。\n- enable_prompt_enhancer：是否启用内置 Qwen3.5 提示词增强（true=开启，false=直出原提示词），默认 true。\n\n**模型与固定设置：** 内置 minimax_h3_image_pruned_int8_convrot、qwen3vl_32b_minimax_h3_int8_convrot、minimax_h3_image_vae_fp16 与 qwen3.5_9b_w4a8_gptq；KSampler 固定 8 步、CFG 8、euler、simple、denoise 1，seed 由后端随机生成，请勿额外传模型名、步数或采样器参数。如需参考底图进行编辑，请改用 image_edit_multiref_minimax_h3 或 ImageEdit_MOSS。",
+  "description": "**描述：** 使用 MiniMax H3 Image 扩散模型根据文字提示词从零生成单张高画质图像（无参考图输入端口）。\n\n**必填参数：**\n- positive_prompt：正向画面内容、主体光影、材质构图与风格细节描述（支持中英文；需在画面中原样渲染的文字请加引号）。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传 ResolutionSelector 完整枚举值（例如 \"3:4 (Portrait Standard)\"、\"16:9 (Widescreen)\"、\"1:1 (Square)\"），默认 \"3:4 (Portrait Standard)\"。\n- megapixels：输出像素档，默认 4.0（官方有效分辨率范围为 4.0–20.0 MP，低于 4 MP 画质明显下降；无特殊要求请保持默认 4.0）。\n- enable_prompt_enhancer：是否启用工作流内置 Qwen3.5 9B 提示词增强器，默认 true（自动将中英文描述扩写为 H3 训练分布的高密度视觉英文描述并保留引号内文字；仅在排版包含大量严禁改写的中文长段落/表格时才设为 false）。\n\n**模型与固定设置：** 内置 minimax_h3_image_pruned_int8_convrot（CFG 蒸馏模型）、qwen3vl_32b_minimax_h3_nvfp4_awq 与 minimax_h3_image_vae_fp16；KSampler 固定 8 步、CFG 1.0、euler、simple、denoise 1，seed 随机生成。如需基于底图/参考图编辑，请改用 image_edit_multiref_minimax_h3。",
   "inputs": [
     {
       "name": "positive_prompt",
@@ -43,8 +43,8 @@
       "required": false,
       "node_id": "14",
       "node_input_name": "megapixels",
-      "default_value": 16.0,
-      "description": "可选。输出分辨率像素档位（单位百万像素 MP），常用 1.0–16.0，默认 16.0。"
+      "default_value": 4.0,
+      "description": "可选。输出分辨率像素档位（单位百万像素 MP），默认 4.0（MiniMax H3 Image 官方有效工作区间为 4.0–20.0 MP，无特殊要求请保持默认 4.0）。"
     },
     {
       "name": "enable_prompt_enhancer",
@@ -53,7 +53,7 @@
       "node_id": "23:22",
       "node_input_name": "switch",
       "default_value": true,
-      "description": "可选。是否开启工作流内置的 Qwen3.5 9B 提示词增强器，默认 true。"
+      "description": "可选。是否开启内置 Qwen3.5 9B 提示词增强器，默认 true（自动适配 H3 视觉描述语法；仅在需严格锁定大段中文排版原文一字不改时设为 false）。"
     }
   ],
   "outputs": null,

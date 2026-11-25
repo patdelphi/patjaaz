@@ -24,7 +24,7 @@
   "78": {
     "inputs": {
       "aspect_ratio": "9:16 (Portrait Widescreen)",
-      "megapixels": 0.9,
+      "megapixels": 0.98,
       "multiple": 32
     },
     "class_type": "ResolutionSelector",
@@ -36,7 +36,7 @@
   },
   "80": {
     "inputs": {
-      "filename_prefix": "AICG",
+      "filename_prefix": "video/MiniMax_H3",
       "format": "auto",
       "format.codec": "auto",
       "codec": "auto",
@@ -54,7 +54,7 @@
   },
   "81": {
     "inputs": {
-      "value": 7
+      "value": 5.0
     },
     "class_type": "PrimitiveFloat",
     "_meta": {
@@ -261,7 +261,7 @@
   },
   "92": {
     "inputs": {
-      "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
       "type": "minimax",
       "device": "default"
     },
@@ -324,7 +324,7 @@
   "105": {
     "inputs": {
       "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
-      "strength_model": 0.75,
+      "strength_model": 1.0,
       "model": [
         "95",
         0
@@ -349,7 +349,7 @@
   },
   "119": {
     "inputs": {
-      "value": "图ref_images.ref_image_0美女站在图ref_images.ref_image_1龙头上飞"
+      "value": "<Picture 1> 中的人物站在 <Picture 2> 的巨龙背上迎风飞行，云海翻涌，伴随呼啸风声与宏大管弦配乐。"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {

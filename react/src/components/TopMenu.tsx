@@ -1,6 +1,5 @@
 import { useConfigs } from '@/contexts/configs'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ChevronLeft, ImageIcon } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'

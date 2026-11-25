@@ -5,6 +5,7 @@ import { memo } from 'react'
 import type { ExcalidrawElement, OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import CanvasBlockArrowControls from './CanvasBlockArrowControls'
 import CanvasPopbar from './CanvasPopbar'
+import CanvasQuickActions from './CanvasQuickActions'
 import CanvasStrokeWidth from './CanvasStrokeWidth'
 import CanvasTextBackground from './CanvasTextBackground'
 
@@ -56,10 +57,16 @@ const CanvasPopbarContainer = ({
           <CanvasBlockArrowControls selectedBlockArrows={selectedBlockArrows} />
         )}
         {showAddToChat && (
-          <CanvasPopbar
-            selectedImages={selectedImages}
-            selectedTexts={selectedTexts}
-          />
+          <>
+            <CanvasQuickActions
+              selectedImages={selectedImages}
+              selectedTexts={selectedTexts}
+            />
+            <CanvasPopbar
+              selectedImages={selectedImages}
+              selectedTexts={selectedTexts}
+            />
+          </>
         )}
       </div>
     </motion.div>

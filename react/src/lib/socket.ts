@@ -122,6 +122,9 @@ export class SocketIOManager {
       case ISocket.SessionEventType.VideoGenerated:
         eventBus.emit('Socket::Session::VideoGenerated', data)
         break
+      case ISocket.SessionEventType.AudioGenerated:
+        eventBus.emit('Socket::Session::AudioGenerated', data)
+        break
       case ISocket.SessionEventType.AllMessages:
         eventBus.emit('Socket::Session::AllMessages', data)
         break

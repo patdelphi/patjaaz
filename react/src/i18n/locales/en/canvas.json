@@ -5,6 +5,10 @@
   "share": "Share Canvas",
   "export": "Export Canvas",
   "exportImages": "Export",
+  "exportMoreOptions": "More export options",
+  "exportSelectedAssets": "Export selected raw assets",
+  "exportCanvasPng": "Export canvas as PNG (with video frames)",
+  "exportCanvasSvg": "Export canvas as SVG (with video frames)",
   "import": "Import Canvas",
   "untitled": "Untitled",
   "back": "Back",
@@ -57,10 +61,12 @@
     "redo": "Redo",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
-    "zoomFit": "Zoom to fit"
+    "zoomFit": "Zoom to fit",
+    "calloutBadge": "Numbered callout (1, 2, 3...)"
   },
   "popbar": {
     "addToChat": "Add to chat",
+    "quickActions": "AI Actions",
     "magicGenerate": "✨ Magic Generate",
     "textBackground": "Text background",
     "applyTextBackground": "Set text background",

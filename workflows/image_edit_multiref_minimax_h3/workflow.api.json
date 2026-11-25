@@ -17,7 +17,7 @@
   "14": {
     "inputs": {
       "aspect_ratio": "16:9 (Widescreen)",
-      "megapixels": 4,
+      "megapixels": 4.0,
       "multiple": 32
     },
     "class_type": "ResolutionSelector",
@@ -74,7 +74,7 @@
   },
   "23:2": {
     "inputs": {
-      "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
       "type": "minimax",
       "device": "default"
     },
@@ -227,7 +227,7 @@
   "23:7": {
     "inputs": {
       "seed": 460218731,
-      "steps": 6,
+      "steps": 8,
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",

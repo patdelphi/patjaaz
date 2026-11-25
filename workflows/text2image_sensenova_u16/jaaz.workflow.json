@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "name": "text2image_sensenova_u16",
+  "display_name": "SenseNova U1.6 文生图",
+  "capability": "t2i",
+  "output_kind": "image",
+  "enabled": true,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用 SenseNova-U1.6 8B 统一多模态模型生成高美学人像、写实摄影、插画、商业海报与密集文字信息图（支持自主文字自检修正循环）。\n\n**必填参数：**\n- positive_prompt：画面内容、构图光影与文字排版描述（中英文均可；所有需出现在画面内的文字请加引号）。\n\n**可选参数与模式选择规则：**\n- aspect_ratio：画幅比例，必须原样传完整枚举字符串，默认 \"3:4 (Portrait Standard)\"。\n- megapixels：输出像素档，默认 4.0（模型原生训练分辨率为 4.0 MP）。\n- turbo_mode：是否启用 8 步 Turbo LoRA（8 步 CFG 1.0 vs 关闭时 50 步 CFG 4.0），默认 true。日常人像、摄影、插画保持 true；生成高密度小字海报或信息图时建议设为 false 以获得最高文字准确度。\n- self_correction：是否启用生成→校验→重绘自检修正循环（最多 5 轮），默认 false。人像与写实风景保持 false；生成带多处文字标签、编号、图表的海报/信息图时请设为 true。\n- enable_prompt_enhancer：是否启用内置 Qwen3.5-9B PE 提示词扩写器，默认 true。\n\n**模型与固定设置：** 内置 sensenova_u1.6_8b_mot_int8_convrot、8-step LoRA 与 qwen3.5_9b_qwen_image_2.1_pe_t2i，seed 随机生成。",
+  "inputs": [
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "64",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。正向画面与排版描述（需原样渲染的文字请加双引号）。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "42",
+      "node_input_name": "aspect_ratio",
+      "default_value": "3:4 (Portrait Standard)",
+      "description": "可选。输出画面比例，必须原样传 Allowed options 中的完整字符串；默认 \"3:4 (Portrait Standard)\"。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "42",
+      "node_input_name": "megapixels",
+      "default_value": 4.0,
+      "description": "可选。输出像素档位（单位 MP），模型原生训练分辨率为 4.0，默认 4.0。"
+    },
+    {
+      "name": "turbo_mode",
+      "type": "boolean",
+      "required": false,
+      "node_id": "34",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。true 启用 8 步 Turbo LoRA（CFG 1.0，速度快）；false 启用 50 步 Quality 高精文字模式（CFG 4.0）；默认 true。"
+    },
+    {
+      "name": "self_correction",
+      "type": "boolean",
+      "required": false,
+      "node_id": "75",
+      "node_input_name": "value",
+      "default_value": false,
+      "description": "可选。true 开启最多 5 轮文字/排版自检修正循环（适合信息图、密集文字海报）；人像与写实场景请保持默认 false。"
+    },
+    {
+      "name": "enable_prompt_enhancer",
+      "type": "boolean",
+      "required": false,
+      "node_id": "60",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。是否启用内置 Qwen3.5-9B T2I 提示词扩写器，默认 true。"
+    }
+  ],
+  "outputs": null,
+  "source_file": "文生图_Sensenova_u16_t2i.json",
+  "source_sha256": "9a5509a126fd65a55c7504ab23bfca7c12495397e068fae7ce9af368c405f7af"
+}

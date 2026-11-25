@@ -271,3 +271,38 @@ async def test_llm_endpoint(request: Request):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/system_prompt")
+async def get_system_prompt():
+    """读取服务端持久化的自定义系统提示词（未设置时返回空字符串）。"""
+    try:
+        settings = settings_service.get_raw_settings()
+        val = settings.get("system_prompt", "")
+        return {"system_prompt": str(val) if isinstance(val, str) else ""}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/system_prompt")
+async def update_system_prompt(request: Request):
+    """保存自定义系统提示词到服务端配置，支持跨浏览器与端口变更保留。"""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict) or "system_prompt" not in payload:
+            raise HTTPException(
+                status_code=400,
+                detail="Expected object with 'system_prompt' string field",
+            )
+        prompt_val = payload.get("system_prompt")
+        if prompt_val is not None and not isinstance(prompt_val, str):
+            raise HTTPException(status_code=400, detail="system_prompt must be a string")
+        cleaned = (prompt_val or "").strip()
+        await settings_service.update_settings({"system_prompt": cleaned})
+        return {"status": "success", "system_prompt": cleaned}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

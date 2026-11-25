@@ -288,3 +288,58 @@ async def generate_new_video_element(
         "scale": [1, 1],
         "crop": None,
     }
+
+
+async def generate_new_audio_element(
+    canvas_id: str,
+    fileid: str,
+    audio_data: Dict[str, Any],
+    canvas_data: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """为画布生成音频卡片元素，自动避让现有元素。"""
+    if canvas_data is None:
+        canvas = await db_service.get_canvas_data(canvas_id)
+        if canvas is None:
+            canvas = {"data": {}}
+        canvas_data = canvas.get("data", {})
+
+    width = int(audio_data.get("width") or 360)
+    height = int(audio_data.get("height") or 108)
+    new_x, new_y = await find_next_best_element_position(
+        canvas_data,
+        target_width=width,
+        target_height=height,
+    )
+
+    return {
+        "type": "audio",
+        "id": fileid,
+        "x": new_x,
+        "y": new_y,
+        "width": width,
+        "height": height,
+        "angle": 0,
+        "fileId": fileid,
+        "strokeColor": "#27272a",
+        "fillStyle": "solid",
+        "strokeStyle": "solid",
+        "boundElements": None,
+        "roundness": None,
+        "frameId": None,
+        "backgroundColor": "#18181b",
+        "strokeWidth": 1,
+        "roughness": 0,
+        "opacity": 100,
+        "groupIds": [],
+        "seed": int(random.random() * 1000000),
+        "version": 1,
+        "versionNonce": int(random.random() * 1000000),
+        "isDeleted": False,
+        "index": None,
+        "updated": int(time.time() * 1000),
+        "link": audio_data.get("url"),
+        "locked": False,
+        "status": "saved",
+        "scale": [1, 1],
+        "crop": None,
+    }

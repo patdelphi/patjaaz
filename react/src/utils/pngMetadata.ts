@@ -123,8 +123,6 @@ function parseZTextChunk(data: Uint8Array): [string, string] | null {
     if (nullIndex === -1) return null
 
     const keyword = text.substring(0, nullIndex)
-    // 跳过compression method byte
-    const compressedData = data.slice(nullIndex + 2)
 
     // 这里需要zlib解压缩，为了简化我们先跳过zTXt
     console.warn('zTXt chunk found but decompression not implemented')

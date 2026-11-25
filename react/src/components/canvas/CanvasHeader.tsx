@@ -11,7 +11,7 @@ type CanvasHeaderProps = {
 
 const CanvasHeader: React.FC<CanvasHeaderProps> = ({
   canvasName,
-  canvasId,
+  canvasId: _canvasId,
   onNameChange,
   onNameSave,
 }) => {

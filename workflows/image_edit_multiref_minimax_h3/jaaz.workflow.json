@@ -7,7 +7,7 @@
   "enabled": true,
   "instance_id": "",
   "seed_strategy": "random",
-  "description": "**描述：** 使用 MiniMax H3 Image 多参考图条件工作流，以 1 张底图为主、可选融合最多 2 张附加参考图（人物、物体或风格），按编辑指令生成编辑后图像。\n\n**必填参数：**\n- reference_image_1：必填，待编辑底图文件名（工作流中记为 `<Picture 1>`，必须传 Jaaz 画布或用户上传的实际图片文件名）。\n- edit_instruction：必填，编辑指令；当提供多张参考图时，请在指令中使用 `<Picture 1>` 指代底图、`<Picture 2>` 与 `<Picture 3>` 分别指代对应参考图，并明确保留原图哪些特征。\n\n**可选参数：**\n- reference_image_2 / reference_image_3：可选的第 2、3 张参考图文件名（省略或留空时，Jaaz 会在运行前自动裁剪对应 LoadImage 节点）。\n- aspect_ratio：输出画幅比例，必须原样传完整枚举字符串，默认 \"16:9 (Widescreen)\"。\n- megapixels：输出像素档，默认 4.0。\n- enable_prompt_enhancer：是否启用内置 Qwen3.5 编辑指令扩写，默认 false。\n\n**模型与固定设置：** 内置 minimax_h3_image_pruned_int8_convrot、qwen3vl_32b_minimax_h3_int8_convrot、minimax_h3_image_vae_fp16；KSampler 固定 6 步、CFG 1、euler、simple、denoise 1，seed 随机生成，请勿传模型文件名或采样参数。\n\n**填写顺序：** 多张参考图请按顺序填写：先 reference_image_1，再 reference_image_2，最后 reference_image_3，不要跳号。",
+  "description": "**描述：** 使用 MiniMax H3 Image 多参考图条件工作流，以 1 张底图为主、可选融合最多 2 张附加参考图（人物、物体或风格），按编辑指令生成编辑后图像。\n\n**必填参数：**\n- reference_image_1：必填，待编辑底图文件名（工作流中记为 `<Picture 1>`，必须传 Jaaz 画布或用户上传的实际图片文件名）。\n- edit_instruction：必填，编辑指令；请在指令中使用 `<Picture 1>` 指代底图、`<Picture 2>` 与 `<Picture 3>` 分别指代对应参考图，并明确保留原图哪些特征。\n\n**可选参数：**\n- reference_image_2 / reference_image_3：可选的第 2、3 张参考图文件名（省略或留空时，Jaaz 会在运行前自动裁剪对应 LoadImage 节点）。\n- aspect_ratio：输出画幅比例，必须原样传完整枚举字符串（建议与底图比例一致），默认 \"16:9 (Widescreen)\"。\n- megapixels：输出像素档，默认 4.0（官方有效分辨率起点 4.0 MP；无特殊要求请保持默认 4.0）。\n\n**模型与固定设置：** 内置 minimax_h3_image_pruned_int8_convrot（CFG 蒸馏模型）、qwen3vl_32b_minimax_h3_nvfp4_awq、minimax_h3_image_vae_fp16；KSampler 固定 8 步、CFG 1.0、euler、simple、denoise 1，内置 PE 固定关闭以保护 `<Picture 1>`~`<Picture 3>` 引用标签不被改写。\n\n**填写顺序：** 多张参考图请按顺序填写：先 reference_image_1，再 reference_image_2，最后 reference_image_3，不要跳号。",
   "inputs": [
     {
       "name": "reference_image_1",
@@ -71,16 +71,7 @@
       "node_id": "14",
       "node_input_name": "megapixels",
       "default_value": 4.0,
-      "description": "可选。输出分辨率像素档位（单位百万像素 MP），常用 1.0–8.0，默认 4.0。"
-    },
-    {
-      "name": "enable_prompt_enhancer",
-      "type": "boolean",
-      "required": false,
-      "node_id": "23:22",
-      "node_input_name": "switch",
-      "default_value": false,
-      "description": "可选。是否启用内置 Qwen3.5 编辑指令扩写，默认 false。"
+      "description": "可选。输出分辨率像素档位（单位百万像素 MP），默认 4.0（MiniMax H3 Image 官方有效工作区间为 4.0–20.0 MP，无特殊要求请保持默认 4.0）。"
     }
   ],
   "outputs": null,

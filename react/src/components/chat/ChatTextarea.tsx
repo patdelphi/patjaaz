@@ -11,10 +11,9 @@ import {
 import { canvasChatImageToFile } from '@/lib/canvasChatImage'
 import { cn } from '@/lib/utils'
 import { Message, MessageContent, Model } from '@/types/types'
-import { ModelInfo, ToolInfo } from '@/api/model'
+import { ToolInfo } from '@/api/model'
 import { useMutation } from '@tanstack/react-query'
 import { useDrop } from 'ahooks'
-import { produce } from 'immer'
 import {
   ArrowUp,
   Loader2,
@@ -215,7 +214,7 @@ const ChatTextarea: React.FC<ChatTextareaProps> = ({
         type: 'text',
         text: text_content as string,
       },
-      ...images.map((image, index) => ({
+      ...images.map((_, index) => ({
         type: 'image_url',
         image_url: {
           url: base64Images[index],

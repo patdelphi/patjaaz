@@ -10,7 +10,6 @@ import {
   PendingType,
   Session,
 } from '@/types/types'
-import { useSearch } from '@tanstack/react-router'
 import { produce } from 'immer'
 import { motion } from 'motion/react'
 import { nanoid } from 'nanoid'
@@ -37,8 +36,8 @@ import ToolcallProgressUpdate from './ToolcallProgressUpdate'
 import { useConfigs } from '@/contexts/configs'
 import 'react-photo-view/dist/react-photo-view.css'
 import { DEFAULT_SYSTEM_PROMPT } from '@/constants'
-import { ModelInfo, ToolInfo } from '@/api/model'
-import MixedContent, { MixedContentImages, MixedContentText } from './Message/MixedContent'
+import { ToolInfo } from '@/api/model'
+import { MixedContentImages, MixedContentText } from './Message/MixedContent'
 
 
 type ChatInterfaceProps = {
@@ -742,7 +741,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {message.role === 'assistant' &&
                     message.tool_calls &&
                     message.tool_calls.at(-1)?.function.name != 'finish' &&
-                    message.tool_calls.map((toolCall, i) => {
+                    message.tool_calls.map((toolCall) => {
                       return (
                         <ToolCallTag
                           key={toolCall.id}

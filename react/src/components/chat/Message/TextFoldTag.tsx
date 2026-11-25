@@ -1,5 +1,3 @@
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ReactNode } from 'react'

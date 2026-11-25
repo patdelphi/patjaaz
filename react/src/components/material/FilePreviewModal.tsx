@@ -2,10 +2,8 @@ import {
   X,
   Download,
   Heart,
-  Star,
   Info,
   Copy,
-  ExternalLink,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'

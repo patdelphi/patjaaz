@@ -252,7 +252,20 @@ class WorkflowExecution:
                 connect_kwargs["additional_headers"] = self.headers
             elif "extra_headers" in params:
                 connect_kwargs["extra_headers"] = self.headers
-        self.ws = await websockets.connect(ws_url, **connect_kwargs)
+        for attempt in range(1, 4):
+            try:
+                self.ws = await websockets.connect(ws_url, **connect_kwargs)
+                return
+            except Exception as exc:
+                if attempt < 3:
+                    await asyncio.sleep(1.0 * attempt)
+                else:
+                    # 反向代理瞬时 TLS 重置无法建立 WS 时置为 None，由 watch_execution 自动降级走 /history 轮询
+                    print(
+                        f"[comfyui_execution] WebSocket connect failed after 3 attempts "
+                        f"({type(exc).__name__}: {exc}), falling back to /history polling."
+                    )
+                    self.ws = None
 
     async def queue(self):
         """提交工作流到 ComfyUI /prompt，并校验响应状态码。"""
@@ -588,7 +601,8 @@ async def upload_image(
             response.raise_for_status()
             body = response.json()
             image_name = body["name"]
-            return f"{subfolder}/{image_name}"
+            # 当 subfolder 为空时直接返回顶层文件名，确保 LoadVideo/LoadAudio 等仅扫描 input 根目录的节点通过 COMBO 校验
+            return f"{subfolder}/{image_name}" if subfolder else image_name
         except httpx.HTTPStatusError as exc:
             message = _extract_http_error_detail(exc)
             pprint(f"[bold red]Error uploading image\n{message}[/bold red]")

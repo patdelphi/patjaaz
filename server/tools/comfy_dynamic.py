@@ -20,7 +20,10 @@ from services.comfy_instance_service import comfy_instance_service
 from services.config_service import FILES_DIR, IMAGE_FORMATS, VIDEO_FORMATS
 from services.db_service import db_service
 from services.websocket_service import broadcast_session_update, send_to_websocket
-from tools.video_generation.video_canvas_utils import generate_new_video_element
+from tools.video_generation.video_canvas_utils import (
+    generate_new_audio_element,
+    generate_new_video_element,
+)
 from utils.canvas_lock import canvas_lock_manager
 from utils.comfyui_history import require_generation_outputs
 from utils.path_security import PathSecurityError, safe_file_id_path
@@ -35,6 +38,27 @@ SEED_FIELD_NAMES = ("seed", "noise_seed")
 AUDIO_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac")
 ALL_VIDEO_FORMATS = VIDEO_FORMATS + (".webm",)
 LOAD_MEDIA_NODE_TYPES = ("LoadImage", "LoadAudio", "LoadVideo")
+STALE_UPLOAD_ERROR_MARKERS = (
+    "invalid image file",
+    "invalid audio file",
+    "invalid video file",
+    "no such file or directory",
+    "filenotfounderror",
+    "does not exist",
+    "cannot identify image file",
+)
+
+
+def is_stale_upload_execution_error(
+    error_text: str, cached_remote_names: List[str]
+) -> bool:
+    """判断 ComfyUI 执行报错是否由远端重启清空 input/ 目录导致旧缓存文件名失效引起。"""
+    if not cached_remote_names or not error_text:
+        return False
+    lowered = error_text.lower()
+    if any(name and name.lower() in lowered for name in cached_remote_names):
+        return True
+    return any(marker in lowered for marker in STALE_UPLOAD_ERROR_MARKERS)
 
 
 def _allowed_extensions_for_media_kind(media_kind: Optional[str]) -> tuple[str, ...]:
@@ -157,12 +181,21 @@ def apply_workflow_inputs_and_seeds(
             _prune_unused_optional_media_node(updated, node_key)
             continue
 
-        if param_name in required_data and val is not None:
+        effective_val = val
+        if (
+            effective_val is None
+            and param_type not in ("image", "audio", "video")
+            and param.get("default_value") is not None
+        ):
+            effective_val = param.get("default_value")
+
+        if effective_val is not None and (param_name in required_data or param.get("default_value") is not None):
             if node_key in updated and isinstance(updated[node_key], dict):
                 node_inputs = updated[node_key].get("inputs")
                 if isinstance(node_inputs, dict) and node_input_name in node_inputs:
-                    node_inputs[node_input_name] = _restore_integer_value(param, val)
-                    explicit_node_fields.add((node_key, str(node_input_name)))
+                    node_inputs[node_input_name] = _restore_integer_value(param, effective_val)
+                    if param_name in required_data and val is not None:
+                        explicit_node_fields.add((node_key, str(node_input_name)))
 
     if seed_strategy == "random":
         rng = seed_generator or (lambda: random.randint(1, (1 << 32) - 1))
@@ -179,6 +212,17 @@ def apply_workflow_inputs_and_seeds(
                     and (str(node_id), seed_key) not in explicit_node_fields
                 ):
                     node_inputs[seed_key] = rng()
+            # 兼容使用独立 PrimitiveInt 种子节点（如 SenseNova 的 "Int (Seed)"）的工作流
+            if str(node.get("class_type") or "") == "PrimitiveInt":
+                meta_title = str((node.get("_meta") or {}).get("title") or "").lower()
+                if (
+                    ("seed" in meta_title or "种子" in meta_title)
+                    and "value" in node_inputs
+                    and isinstance(node_inputs["value"], int)
+                    and not isinstance(node_inputs["value"], bool)
+                    and (str(node_id), "value") not in explicit_node_fields
+                ):
+                    node_inputs["value"] = rng()
 
     return updated
 
@@ -288,6 +332,8 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         }
 
         required_data = dict(kwargs)
+        # 记录本次复用 SHA-256 缓存的本地媒体，若远端重启清空了 input/ 可自动失效重传一次
+        cached_media_entries: List[tuple[str, str, str, bytes, str, str, str]] = []
         try:
             for key, value in required_data.items():
                 p_type = param_type_by_name.get(key, "image")
@@ -297,33 +343,55 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                 )
                 if not media_path:
                     continue
+                # ComfyUI LoadVideo / LoadAudio 节点的 COMBO 校验仅扫描 input 根目录，不识别子目录前缀
+                target_subfolder = "" if media_kind in ("video", "audio") else "jaaz"
+                media_cache_key = (
+                    upload_cache_key
+                    if target_subfolder == "jaaz"
+                    else f"{upload_cache_key}|{target_subfolder}"
+                )
                 filename = os.path.basename(media_path)
                 with open(media_path, "rb") as media_file:
                     media_bytes = media_file.read()
                 sha256_hex = comfy_instance_service.compute_bytes_sha256(media_bytes)
                 cached_name = comfy_instance_service.get_cached_upload(
-                    upload_cache_key, sha256_hex
+                    media_cache_key, sha256_hex
                 )
                 if cached_name:
                     required_data[key] = cached_name
+                    cached_media_entries.append(
+                        (
+                            key,
+                            media_cache_key,
+                            sha256_hex,
+                            media_bytes,
+                            filename,
+                            cached_name,
+                            target_subfolder,
+                        )
+                    )
                 else:
                     media_stream = BytesIO(media_bytes)
                     uploaded_name = await upload_image(
-                        media_stream, api_url, filename, headers=auth_headers
+                        media_stream,
+                        api_url,
+                        filename,
+                        subfolder=target_subfolder,
+                        headers=auth_headers,
                     )
                     comfy_instance_service.set_cached_upload(
-                        upload_cache_key, sha256_hex, uploaded_name
+                        media_cache_key, sha256_hex, uploaded_name
                     )
                     required_data[key] = uploaded_name
         except (PathSecurityError, FileNotFoundError) as exc:
             await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
             return f"image generation failed: {str(exc)}"
 
-        workflow_dict = await db_service.get_comfy_workflow(wf["id"])
+        base_workflow_dict = await db_service.get_comfy_workflow(wf["id"])
 
         seed_strategy = str(wf.get("seed_strategy") or "random")
         workflow_dict = apply_workflow_inputs_and_seeds(
-            workflow_dict,
+            base_workflow_dict,
             input_defs,
             required_data,
             seed_strategy=seed_strategy,
@@ -359,7 +427,50 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             )
             # 按实例 max_concurrency 限流：超出的任务排队等待，而不是同时提交到同一实例
             async with comfy_instance_service.acquire_slot(instance_id, max_concurrency):
-                outputs = await generator.generate(ctx=ctx)
+                try:
+                    outputs = await generator.generate(ctx=ctx)
+                except Exception as first_exc:
+                    cached_names = [entry[5] for entry in cached_media_entries]
+                    if not is_stale_upload_execution_error(str(first_exc), cached_names):
+                        raise
+                    # 远端 ComfyUI 重启清空了 input/，失效对应缓存并重新上传重试一次
+                    for (
+                        param_key,
+                        media_cache_key,
+                        sha_hex,
+                        raw_bytes,
+                        orig_name,
+                        _,
+                        target_subfolder,
+                    ) in cached_media_entries:
+                        comfy_instance_service.invalidate_cached_upload(
+                            media_cache_key, sha_hex
+                        )
+                        re_uploaded = await upload_image(
+                            BytesIO(raw_bytes),
+                            api_url,
+                            orig_name,
+                            subfolder=target_subfolder,
+                            headers=auth_headers,
+                        )
+                        comfy_instance_service.set_cached_upload(
+                            media_cache_key, sha_hex, re_uploaded
+                        )
+                        required_data[param_key] = re_uploaded
+                    retry_workflow = apply_workflow_inputs_and_seeds(
+                        base_workflow_dict,
+                        input_defs,
+                        required_data,
+                        seed_strategy=seed_strategy,
+                    )
+                    generator = ComfyUIWorkflowRunner(
+                        retry_workflow,
+                        api_url,
+                        headers=auth_headers,
+                        timeout=None,
+                        instance_id=instance_id,
+                    )
+                    outputs = await generator.generate(ctx=ctx)
             require_generation_outputs(outputs)
             if not isinstance(outputs, list) or (
                 outputs and not isinstance(outputs[0], (list, tuple))
@@ -407,6 +518,13 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                             {"width": width, "height": height, "url": url},
                             canvas_data=canvas_data.get("data", {}),
                         )
+                    elif mime_type.startswith("audio"):
+                        new_element = await generate_new_audio_element(
+                            canvas_id,
+                            file_id,
+                            {"width": 360, "height": 108, "url": url},
+                            canvas_data=canvas_data.get("data", {}),
+                        )
 
                     if new_element is not None:
                         canvas_data["data"]["elements"].append(new_element)
@@ -451,6 +569,17 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                             "element": file_info["element"],
                             "file": file_info["file"],
                             "video_url": file_info["url"],
+                        },
+                    )
+                elif file_info["mime_type"].startswith("audio"):
+                    await broadcast_session_update(
+                        session_id,
+                        canvas_id,
+                        {
+                            "type": "audio_generated",
+                            "element": file_info["element"],
+                            "file": file_info["file"],
+                            "audio_url": file_info["url"],
                         },
                     )
 

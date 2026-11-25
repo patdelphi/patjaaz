@@ -1,0 +1,768 @@
+{
+  "1": {
+    "inputs": {
+      "ckpt_name": "sensenova_u1.6_8b_mot_int8_convrot.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Checkpoint加载器（简易）",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "4": {
+    "inputs": {
+      "text": [
+        "54",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "5": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "1",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "6": {
+    "inputs": {
+      "width": [
+        "42",
+        0
+      ],
+      "height": [
+        "42",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyHiDreamO1LatentImage",
+    "_meta": {
+      "title": "空 HiDream-O1 潜空间图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "7": {
+    "inputs": {
+      "value": 42
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Seed)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "9": {
+    "inputs": {
+      "mode": "simple",
+      "mode.num_iterations": 5,
+      "cache_iterations": false,
+      "initial_iteration_value": [
+        "44",
+        0
+      ]
+    },
+    "class_type": "StartLoop",
+    "_meta": {
+      "title": "开始循环",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "10": {
+    "inputs": {
+      "index": 0,
+      "list": [
+        "9",
+        4
+      ]
+    },
+    "class_type": "GetItemFromList",
+    "_meta": {
+      "title": "Get Item From List (Positive)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "11": {
+    "inputs": {
+      "index": 1,
+      "list": [
+        "9",
+        4
+      ]
+    },
+    "class_type": "GetItemFromList",
+    "_meta": {
+      "title": "Get Item From List (Negative)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "12": {
+    "inputs": {
+      "index": 2,
+      "list": [
+        "9",
+        4
+      ]
+    },
+    "class_type": "GetItemFromList",
+    "_meta": {
+      "title": "Get Item From List (Previous latent)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "14": {
+    "inputs": {
+      "task": "self-correction",
+      "max_tokens": 1024,
+      "conditioning": [
+        "10",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "task.samples": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "SenseNovaConditioning",
+    "_meta": {
+      "title": "SenseNova 条件",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "15": {
+    "inputs": {
+      "expression": "a + b",
+      "values.a": [
+        "9",
+        0
+      ],
+      "values.b": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Seed per iteration",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "16": {
+    "inputs": {
+      "seed": [
+        "15",
+        1
+      ],
+      "steps": [
+        "47",
+        0
+      ],
+      "cfg": [
+        "40",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "41",
+        0
+      ],
+      "positive": [
+        "14",
+        0
+      ],
+      "negative": [
+        "14",
+        2
+      ],
+      "latent_image": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "20": {
+    "inputs": {
+      "accumulate": false,
+      "output_value": [
+        "46",
+        0
+      ],
+      "next_iteration_value": [
+        "46",
+        0
+      ],
+      "terminations.termination0": [
+        "14",
+        1
+      ]
+    },
+    "class_type": "EndLoop",
+    "_meta": {
+      "title": "结束循环",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "21": {
+    "inputs": {
+      "index": 0,
+      "list": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "GetItemFromList",
+    "_meta": {
+      "title": "Final conditioning",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "22": {
+    "inputs": {
+      "index": 2,
+      "list": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "GetItemFromList",
+    "_meta": {
+      "title": "Final latent",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "23": {
+    "inputs": {
+      "clip": [
+        "1",
+        1
+      ],
+      "conditioning": [
+        "21",
+        0
+      ],
+      "samples": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "SenseNovaInterleaveDecode",
+    "_meta": {
+      "title": "SenseNova 交错解码",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "24": {
+    "inputs": {
+      "filename_prefix": "sensenova/image_sensenova_u16_t2i",
+      "images": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "27": {
+    "inputs": {
+      "lora_name": "sensenova_u1.6_8b_mot_8step_lora_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "29": {
+    "inputs": {
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "HiDreamO1ReferenceImages",
+    "_meta": {
+      "title": "HiDream-O1 参考图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "34": {
+    "inputs": {
+      "value": true
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Turbo Mode?",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "35": {
+    "inputs": {
+      "value": 8
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Steps)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "36": {
+    "inputs": {
+      "value": 50
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int (Setps)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "37": {
+    "inputs": {
+      "value": 4
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (CFG)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "38": {
+    "inputs": {
+      "value": 1
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (CFG)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "40": {
+    "inputs": {
+      "switch": [
+        "34",
+        0
+      ],
+      "on_false": [
+        "37",
+        0
+      ],
+      "on_true": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (cfg)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "41": {
+    "inputs": {
+      "switch": [
+        "34",
+        0
+      ],
+      "on_false": [
+        "1",
+        0
+      ],
+      "on_true": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (Model)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "42": {
+    "inputs": {
+      "aspect_ratio": "3:4 (Portrait Standard)",
+      "megapixels": 4.0,
+      "multiple": 32
+    },
+    "class_type": "ResolutionSelector",
+    "_meta": {
+      "title": "分辨率选择器",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "44": {
+    "inputs": {
+      "inputs.input0": [
+        "29",
+        0
+      ],
+      "inputs.input1": [
+        "29",
+        1
+      ]
+    },
+    "class_type": "CreateList",
+    "_meta": {
+      "title": "创建列表",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "45": {
+    "inputs": {
+      "switch": [
+        "14",
+        3
+      ],
+      "on_true": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "切换",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "46": {
+    "inputs": {
+      "inputs.input0": [
+        "14",
+        0
+      ],
+      "inputs.input1": [
+        "14",
+        2
+      ],
+      "inputs.input2": [
+        "45",
+        0
+      ]
+    },
+    "class_type": "CreateList",
+    "_meta": {
+      "title": "创建列表",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "47": {
+    "inputs": {
+      "switch": [
+        "34",
+        0
+      ],
+      "on_false": [
+        "36",
+        0
+      ],
+      "on_true": [
+        "35",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (steps)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "48": {
+    "inputs": {
+      "switch": [
+        "9",
+        1
+      ],
+      "on_false": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "If/Else Switch (Previous latent)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "53": {
+    "inputs": {
+      "value": "## 1. Task and scope\n\nYou are an expert in expanding text-to-image prompts. You will receive a user's original image request. Develop it into a detailed description ready for image generation, preserving the user's explicit requirements and adding visible details consistent with their intent.\n\nBuild on the user's visual concept. Preserve specified subjects, counts, actions, positions, relationships, composition, medium, style, colors, on-image text, and other explicit requirements. Respect explicit exclusions. Refine the existing content and fill in visual information needed to render the scene. Added details should fit the original concept and make the image more specific and coherent.\n\n## 2. Structure of the expanded description\n\nBegin with an overview, then develop the image in a natural viewing order. Use the following structure, adapting it to the image's visual flow.\n\n- Open with the image type, central subject, or visual concept. Include the viewpoint, medium, style, palette, or mood when it defines the first impression. For a Chinese description, usually begin with “这是一张……” or “这是一幅……”. In English, “This is a…” or “This is an…” is suitable. Use a natural opening in other languages.\n- Describe the main elements, their appearance, state, actions, and relationships, then the surrounding setting, regions, and spatial layers. A scene can progress from foreground to background, a flat or abstract composition from its main shapes outward, and a designed layout in reading order.\n- When describing an object or region, select suitable treatments from the relevant parts of Section 3, guided by the user's request and the image's focus. Describe how those treatments take form in this image: their location, extent, and expression on the subjects or surroundings, and the resulting appearance, spatial relationships, or atmosphere. Combine treatments where useful and integrate their effects into the scene description.\n\n## 3. Visual details to consider\n\nThe following directions are references that may be selected, combined, or varied to suit the subject and content relationships. Follow the user's explicit visual requirements. For choices left open, select the most suitable treatment rather than favoring options listed first. Each reference connects a method with a possible visible result. In the final description, develop the selected treatment as it appears in this particular image, with concrete forms, surfaces, spatial relationships, and light or color effects. Let mood emerge from how these choices work together in the scene; their emotional meaning depends on the content.\n\n### 3.1 Subjects and actions\n\n#### 3.1.1 What is in the image\n\nIdentify the main subjects, their location, count, and appearance. Add scale, orientation, or state when it helps identify them. Give abstract ideas a concrete visual form.\n\nPossible details include a person's silhouette, clothing, or expression, an object's shape, joints, or signs of use, or the point where a repeating abstract pattern changes.\n\n#### 3.1.2 Actions and interactions\n\nWhen people appear, describe their specific poses and what they are doing at that moment. If the user provides only an identity or appearance, choose a natural pose that fits the scene. For a facial close-up, describe the direction of the head and gaze. When people or objects interact, make the interaction visually explicit.\n\n### 3.2 Composition and viewpoint\n\n#### 3.2.1 Placement\n\nDescribe where the main elements sit, their front-to-back order, how much space they occupy, and where space is left open. Preserve the user's specified directions and layout.\n\n- Centered and balanced arrangements. Use central placement, symmetry, or balanced masses to establish a clear visual anchor and organize the surrounding space.\n- Offset and asymmetric arrangements. Place the main subject away from the center and balance it with other forms or open space, creating direction or a sense of movement where appropriate.\n- Depth and overlapping layers. Use foreground, middle-ground, and background elements, overlap, and changes in scale to clarify distance and the subject's relationship to its setting.\n- Lines and visual paths. Use edges, curves, diagonals, or repeated forms to guide the eye toward the subject or connect important parts of the image.\n- Repetition and variation. Repeat shapes, intervals, or proportions, then vary a relevant element to create rhythm or draw attention to a difference.\n- Grouping and hierarchy. Use proximity, alignment, relative size, or separated regions to show which elements belong together and which carry the main emphasis.\n- Open and dense space. Adjust spacing, cropping, and the distribution of detail to give the subject room or make the frame feel concentrated, as the content requires.\n\n#### 3.2.2 Viewing angle and framing\n\nDescribe the viewing angle and distance, and which parts of the subject are visible. Where cropping or blur matters, specify what is cut off and what is sharpest.\n\n- Views from above. Use top-down or oblique views to show the arrangement of elements; an oblique angle can also reveal their sides, height, and depth.\n- Eye-level and side views. Present the subject at its own level or in profile to make its shape, posture, and relationship to nearby elements easy to read.\n- Views from below. Use a low viewpoint and upward-extending forms to emphasize height or relative scale when these matter to the scene.\n- Wider framing. Include the surroundings and distances between elements to show where an event takes place and how the subject occupies that space.\n- Close-ups and macro views. Bring an expression, action, object part, or surface into prominence so that the relevant gesture, structure, or texture can be seen clearly.\n- Wide-angle perspective. Use differences between near and distant scale and converging lines to develop the extent and depth of the space.\n- Focus and depth of field. Use selective focus to distinguish a subject from softer surroundings, or deep focus to keep relevant elements at different distances readable.\n\n### 3.3 Light and its effects\n\nWhen lighting matters, identify the source, direction, and illuminated areas. Choose suitable qualities and describe their visible effects on the subjects and surroundings. Preserve the user's lighting requirements and keep the light, shadows, and material response consistent.\n\n- Soft and even light. Use overcast daylight, diffused window light, or broad studio light to create gradual tonal transitions and keep surface details readable.\n- Directional and grazing light. Use sunlight, side lighting, or a low light angle to shape illuminated and shaded areas, bringing out volume, edges, or surface texture.\n- Backlighting and transmitted light. Use light from behind or through a material to form rim light, silhouettes, or translucent color, separating contours or revealing the material's thickness.\n- Brightness and fill. Adjust subject-background contrast and reflected fill to direct attention and control how much detail remains visible in darker regions.\n- Atmospheric light and particles. Use mist, haze, or illuminated dust to reveal light shafts and depth; self-luminous particles can appear as scattered points or trails within the scene.\n- Patterned light and caustics. Use foliage, openings, water, or glass to break light into patches, bands, or concentrated bright patterns on particular surfaces.\n- Light sources within the scene. Use windows, lamps, headlights, streetlights, or luminous objects to illuminate nearby forms, with mixed-color lighting where different sources meet.\n- Optical highlights and glow. Use reflections, halation, lens flare, starbursts, glow, or bokeh to shape the appearance of bright areas and defocused light sources in a way consistent with the image's medium.\n\nFor flat graphic images, tonal differences and color-block boundaries can establish layers.\n\n### 3.4 Palette and color relationships\n\nStart with the dominant colors, then describe the colors of the subjects and key regions. Preserve specified palettes, object colors, and light colors. Select color relationships that suit the content and show where their contrasts or visual echoes appear.\n\n- Natural and local colors. Develop colors from the subjects and materials, then vary their lightness or temperature across illuminated and shaded areas to keep objects recognizable within the scene.\n- Black and white or monochrome. Use differences in lightness, texture, and small tonal shifts to distinguish forms and layers within a restricted color range.\n- Analogous and limited palettes. Use related hues or a small set of recurring colors across subjects and regions, linking the image while retaining differences between important elements.\n- Pale, muted, and vintage tones. Use pastels, lowered saturation, or restrained film-like color shifts to soften color transitions or suggest a period treatment when appropriate to the subject.\n- Vivid colors and strong contrasts. Use saturated or fluorescent hues, complementary colors, or distinct color blocks to separate forms or establish an emphasis.\n- Warm-cool relationships and accents. Distribute warmer and cooler areas across the image, or place a contrasting or metallic accent on a relevant detail to establish depth or a focal point.\n- Gradients, iridescence, and alternating colors. Use gradual color changes, shifting surface hues, or repeated color sequences to develop transitions, material appearance, or visual rhythm.\n- Color coding. Assign consistent colors to categories, stages, or states and identify which graphics, labels, or legend entries they represent.\n\n### 3.5 Medium, style, and surface texture\n\nPreserve the requested medium or style and describe how it appears on specific subjects. When style is open, choose from the references below or another treatment appropriate to the concept. For mixed media, explain which regions use each treatment and how they join.\n\n- Photography. Use documentary, macro, long-exposure, or film treatments to develop a captured moment, a small detail, visible motion, or a particular grain and tonal character.\n- Drawing and painting. Use watercolor, gouache, oil paint, ink, or line drawing to construct subjects through transparent washes, opaque color areas, layered strokes, or contours, making the chosen edges and surface texture visible.\n- Comics and animation. Use expressive outlines, cross-hatching, simplified silhouettes, or cel shading to clarify forms and actions or establish a stylized narrative treatment.\n- Graphic and technical imagery. Use flat geometry, typographic organization, blueprint lines, or technical diagrams to make shapes, information, or structural relationships clear.\n- Printmaking and printing. Use woodcut marks, screen-printed layers, stencil edges, or halftone dots to construct forms and tonal differences with a distinct printed texture.\n- Paper art and collage. Use cut or torn paper, layered fragments, or photomontage to combine subjects and regions through visible edges, overlaps, and material contrasts.\n- Three-dimensional and miniature scenes. Use isometric views, clay, or miniature construction to give forms clear volume, scale, and material character within a coherent space.\n- Digital and surreal imagery. Use pixels, low-poly facets, abstraction, or deliberate changes in scale and form to build the requested scene or visual concept with a consistent visual language.\n- Surface texture. Use grain, fibers, brushstrokes, ink bleed, cut edges, or matte, glossy, metallic, glass, and translucent finishes on relevant surfaces to make their material character visible.\n\n### 3.6 Atmosphere and emotion\n\nPreserve the requested mood and develop it through the subjects, actions, framing, light, color, and materials in this particular scene. When mood is unspecified, let it follow naturally from the content. The following are possible ways to support a feeling; choose and adapt them to the scene rather than applying a fixed technique-to-emotion formula.\n\n- Quiet and spacious. Use still subjects, open intervals, or restrained visual changes to give the eye room to pause and make the surrounding space perceptible.\n- Warm, welcoming, and everyday. Use appropriate proximity, familiar activities, or signs of ordinary use to make the relationships and setting feel approachable or lived-in.\n- Relaxed, fresh, and airy. Use an unhurried action, open framing, or light visual transitions where these suit the scene, giving the image a sense of ease or openness.\n- Lively, bustling, and playful. Use varied movement, repeated accents, or an unexpected but fitting change in shape or scale to establish energy, interaction, or a childlike quality.\n- Austere, detached, lonely, or wistful. Use separation, restrained interactions, or meaningful empty space to show distance or absence when supported by the subject and situation.\n- Solemn and monumental. Use scale relationships, stable arrangements, or extended forms to give the subject a sense of weight, presence, or occasion.\n- Tense and oppressive. Use the scene's approaching actions, close spacing, constricted framing, or pronounced divisions to make pressure or uncertainty visible.\n- Dreamlike and mysterious. Use partial visibility, reflections, translucent layers, or altered spatial relationships to create ambiguity or an unfamiliar sense of space.\n- Retro and nostalgic. Use period-appropriate objects, materials, image treatment, or signs of wear to suggest a particular time or the traces it has left.\n\n### 3.7 On-image text and lettering\n\nFor every place that needs text, specify the actual words to be rendered and put them in quotation marks. Whenever you mention a headline, label, caption, or other visible text, include its complete wording in the description. Do not merely say that a title or text appears, leave placeholders, or defer writing the copy.\n\n- Posters. When the user provides little detail, first decide what readers should remember, know, or do. Keep the copy brief when the main visual conveys the theme on its own. When words are needed to state the theme, write one headline, then add a subtitle, key selling points, or a call to action as the poster's purpose requires. Use only user-provided details for specifics such as dates, venues, prices, or cast members.\n- Infographics. When the user gives only a topic or little detail, first decide what readers should understand or be able to do after viewing the infographic. Use drawings, diagrams, or step illustrations to show the relevant objects, structures, or processes. Add text wherever readers need a name, a distinction, an instruction, or an explanation that the visuals alone do not convey. Follow any explicit limits on text, including requests for no text, minimal text, or only the user's supplied wording. In reading order, describe each area's graphic together with its corresponding labels, step names, or brief explanations, and quote the exact words to be rendered. Preserve a user-provided main title, and leave it unspecified when none is given.\n\nChoose letterforms to suit the purpose and mood, specifying whether they belong to a title, keyword, explanation, or text on an object. Important words can receive more expressive shaping while keeping their recognizable character structure.\n\nWhen titles or keywords need emphasis, optional treatments include brush lettering, handwriting, graffiti lettering, pixel lettering, dimensional lettering, and other display styles. Adjust color, type size, stroke weight, and brushwork as appropriate, for example through a contrasting color, an enlarged word, or dry-brush gaps at the ends of strokes.\n\n## 4. Language of the description and on-image text\n\nUse the output language explicitly requested by the user. Otherwise, use the main language in which the original request describes the image and gives instructions. For mixed-language input, determine the language from those descriptive and instructional passages.\n\nThe language of visible text is independent of the description's language. Preserve user-supplied copy, brand names, and proper names exactly in their specified locations, including language, capitalization, numbers, and punctuation. Follow explicit requests for translation or bilingual copy.\n\nWhen expanding source wording into new on-image copy, use the language explicitly requested by the user. If none is specified, keep the new copy in the same language as the wording it is derived from. For copy with no source wording, use the description's language.\n\n## 5. Response format\n\n- Return the description and nothing else: one continuous paragraph, in a single line starting on the very first character of your reply. Use the description language specified in Section 4.\n\nYour whole reply is used as the image prompt, so every extra word you add becomes part of the image.\n"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text (System Prompt - Text to Image)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "54": {
+    "inputs": {
+      "source": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "预览任意",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "55": {
+    "inputs": {
+      "clip_name": "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "57": {
+    "inputs": {
+      "prompt": [
+        "64",
+        0
+      ],
+      "max_length": 4096,
+      "sampling_mode": "on",
+      "sampling_mode.temperature": 1,
+      "sampling_mode.top_k": 20,
+      "sampling_mode.top_p": 0.95,
+      "sampling_mode.min_p": 0,
+      "sampling_mode.repetition_penalty": 1,
+      "sampling_mode.presence_penalty": 1.5,
+      "sampling_mode.seed": 0,
+      "thinking": true,
+      "use_default_template": true,
+      "mtp": "auto",
+      "clip": [
+        "55",
+        0
+      ],
+      "system_prompt": [
+        "53",
+        0
+      ]
+    },
+    "class_type": "TextGenerateV2",
+    "_meta": {
+      "title": "生成文本",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "60": {
+    "inputs": {
+      "value": true
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Boolean(Enable PE)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "61": {
+    "inputs": {
+      "switch": [
+        "60",
+        0
+      ],
+      "on_false": [
+        "64",
+        0
+      ],
+      "on_true": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "切换",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "64": {
+    "inputs": {
+      "value": "3:4竖版，亲子主题商业活动海报，平面设计稿，无透视，网格化规整拼贴排版，中英文混排，字体层级严格区分，所有文案固定、位置锁定，文字锐利清晰、无扭曲粘连、无乱码糊字，背景是哑光奶油米纸张底色，带细腻印刷网点、淡手绘植物线条、柔和撕纸边缘效果，主色调鼠尾草绿、暖橘橙、炭黑、浅卡其，版面信息饱满，分区隔离，文字区块和画面人物道具互不遮挡。\n画面顶部通栏，顶部第一行：超大粗衬线英文主标题【LITTLE EXPLORERS MARKET】，炭黑色，部分字母暖橘橙填充，字距拉开，标题下方配一根细鼠尾草绿装饰横线；横线下方是暖橘橙圆角底色块，色块内居中粗无衬线中文主标题【小小探索家亲子自然市集】；主标题下方居中一行纤细无衬线引导小字：自然观察｜手作体验｜亲子游戏｜轻食野餐｜儿童创作；海报右上角，独立奶油白圆角小标签，标签内上排中文【周末限定】，下排小号英文【WEEKEND SPECIAL】。\n画面中心偏下主体区域，放置亲子人物画面：年轻妈妈身穿米白针织开衫、卡其长裤，蹲在草坪上，身旁7岁小女孩，两人一同专注做树叶拓印，妈妈温柔看向孩子，小女孩双手举着拓印画；身下铺浅米色野餐垫，垫子上摆放原木小矮桌、藤编收纳篮、彩色蜡笔、空白画纸、昆虫观察盒、放大镜、树叶干花标本、安全粘土、儿童剪刀、迷你盆栽、手工徽章、玻璃杯柠檬水、曲奇小饼干；背景虚化公园树荫、白色尖顶小帐篷、暖光串灯；柔和漫射侧光，道具材质写实细腻，人物区域干净，上方、左右两侧预留空白给文字板块，文字不会压在人脸和核心道具上。\n画面左上独立白色卡片区，卡片标题，粗体鼠尾草绿字【活动亮点】，标题右侧搭配小号英文【HIGHLIGHTS】；卡片内分点排布，每一条用小圆点做分隔： 01 自然手作坊｜树叶拓印、粘土昆虫、植物书签 02 亲子探索任务｜寻不同叶片、观察小虫、打卡自然地图 03 儿童创意画展｜展出孩子手绘自然画、原创手工作品 04 轻食野餐区｜自制三明治、鲜果水、无添加儿童曲奇、健康小食\n画面左下独立浅奶油色卡片区，卡片标题，粗体暖橘橙色字【工作坊时间表】，标题右侧搭配小号英文【WORKSHOP SCHEDULE】；每一行用浅灰细横线隔开： 10:30 自然手作坊 | NATURE CRAFT 11:30 亲子探索任务 | FAMILY SCAVENGER HUNT 14:00 儿童创意画展 | KIDS ART SHOW 15:30 绘本故事时间 | STORY TIME 16:30 趣味亲子小游戏 | FAMILY GAMES\n画面右上竖向窄卡片区，卡片标题，粗体炭黑字【本期内容】，标题右侧小号英文【WHAT’S INSIDE】；条目配迷你绿叶小图标，细字分行： 亲子自然课堂 儿童手作体验 周末野餐计划 环保小卫士行动 童趣摄影打卡角 亲子共读时光\n画面右侧中部，竖向排布4张独立圆角小卡片，卡片底色交替为奶油白、浅鼠尾草绿，卡片之间留白隔开，互不重叠： 卡片01，左上角暖橘橙粗号数字01，标题【自然手作坊】，正文：收集花叶石子，制作专属自然拼贴画，底部小字英文【NATURE CRAFT WORKSHOP】 卡片02，左上角暖橘橙粗号数字02，标题【亲子探索任务】，正文：对照任务卡寻找植物纹理与小虫，完成探索地图，底部小字英文【FAMILY SCAVENGER HUNT】 卡片03，左上角暖橘橙粗号数字03，标题【儿童创意画展】，正文：展示孩子自然绘画、手作和童趣小故事，底部小字英文【KIDS ART EXHIBITION】 卡片04，左上角暖橘橙粗号数字04，标题【亲子野餐会】，正文：带上野餐垫，享受松弛治愈的周末亲子时光，底部小字英文【FAMILY PICNIC】\n人物画面左下方空白处，放置倾斜手写花体英文【Play, learn, and grow together in nature.】，暖橘橙色；英文下方搭配圆润细体中文短句【在自然里，一起玩，一起学，一起长大。】，鼠尾草绿色，周围点缀简约手绘小叶、虚线装饰，文字区块独立，不覆盖人物。\n画面底部上方，横向浅卡其底色通栏信息区，标题粗体【活动信息】，右侧小号英文【EVENT INFO】，内容分栏横向排布，栏与栏之间细竖线分隔： 日期：2026.06.01-06.02 时间：10:00-18:00 地点：城市中央草坪·自然手作区 参与对象：3-12岁儿童及家长 报名说明：现场免费参与，部分工坊有人数上限 配套小号英文一行：DATE 06.01-06.02｜TIME 10:00-18:00｜LOCATION CENTRAL LAWN\n海报最底端，深鼠尾草绿通栏底条，底色统一，文字全部米白色，分左右两大块，中间留白分隔： 左侧品牌区：加粗字体【MOSS & MUG 苔藓与杯子】，下方小字英文【MAKING EVERY WEEKEND SPECIAL】 右侧温馨提示区：中文【温馨提示：穿着舒适衣物，自带水杯，爱护草坪与自然】，下方对应英文【WEAR COMFORTABLE CLOTHES, BRING YOUR OWN CUP, AND RESPECT NATURE.】，最右下角小字标签：亲子友好 · 环保倡议\n字体固定规则：英文大标题高对比粗衬线，中文主标题粗无衬线，板块栏目标题中粗无衬线，卡片标题粗无衬线，正文描述细无衬线，辅助英文信息窄细无衬线，标语为流畅手写体；装饰元素：手绘小叶子、虚线箭头、定位圆点、圆角标签、撕纸边框；所有文字区块边界清晰，板块之间留有安全留白，不同文字块拉开距离，避免AI生成时文字互相穿插融合错乱。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text (User Prompt)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "67": {
+    "inputs": {
+      "seed": [
+        "7",
+        0
+      ],
+      "steps": [
+        "47",
+        0
+      ],
+      "cfg": [
+        "40",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "41",
+        0
+      ],
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "5",
+        0
+      ],
+      "latent_image": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "69": {
+    "inputs": {
+      "samples": [
+        "67",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "74": {
+    "inputs": {
+      "switch": [
+        "75",
+        0
+      ],
+      "on_false": [
+        "69",
+        0
+      ],
+      "on_true": [
+        "23",
+        1
+      ]
+    },
+    "class_type": "ComfySwitchNode",
+    "_meta": {
+      "title": "切换",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  },
+  "75": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Boolean (Self-Correction)",
+      "cnr_id": "comfy-core",
+      "ver": "0.46.0"
+    }
+  }
+}

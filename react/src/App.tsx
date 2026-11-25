@@ -1,15 +1,16 @@
 // import InstallComfyUIDialog from '@/components/comfyui/InstallComfyUIDialog'
 import UpdateNotificationDialog from '@/components/common/UpdateNotificationDialog'
-import SettingsDialog from '@/components/settings/dialog'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { ConfigsProvider } from '@/contexts/configs'
 import { useTheme } from '@/hooks/use-theme'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { openDB } from 'idb'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
+
+const SettingsDialog = lazy(() => import('@/components/settings/dialog'))
 import { Toaster } from 'sonner'
 import { routeTree } from './route-tree.gen'
 
@@ -113,7 +114,9 @@ function App() {
               <UpdateNotificationDialog />
 
               {/* Settings Dialog */}
-              <SettingsDialog />
+              <Suspense fallback={null}>
+                <SettingsDialog />
+              </Suspense>
 
             </div>
           </ConfigsProvider>

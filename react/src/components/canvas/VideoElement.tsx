@@ -269,16 +269,16 @@ export const CanvasVideoElement: React.FC<{
 }> = ({
     elementId,
     src,
-    x,
-    y,
+    x: _x,
+    y: _y,
     width,
     height,
     duration,
     isSelected = false,
-    onSelect,
+    onSelect: _onSelect,
     onDelete,
     onResize,
-    onPaste,
+    onPaste: _onPaste,
 
 }) => {
         // Focus the element when selected to ensure keyboard events work

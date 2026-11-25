@@ -1,8 +1,10 @@
 import { getCanvas, saveCanvas } from '@/api/canvas'
 import { recomputeResizedBlockArrows } from '@/lib/blockArrow'
+import { externalizeInlineCanvasImages } from '@/lib/canvasBase64Externalizer'
 import { findNewPersistableImageIds, getPersistableImageIds } from '@/lib/canvasImagePersistence'
 import {
   computeSceneVersionKey,
+  isAudioUrl,
   isVideoUrl,
   normalizeCanvasElementsForScene,
   pickCanvasThumbnailUrl,
@@ -34,6 +36,7 @@ import {
 import { useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
+import { AudioElement } from './AudioElement'
 import { VideoElement } from './VideoElement'
 
 import '@/assets/style/canvas.css'
@@ -109,16 +112,24 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         return
       }
 
+      // 将粘贴或拖拽进画布的 data:image/* 内联图片外置上传为 /api/file/<id>，避免撑爆 SQLite JSON
+      let effectiveFiles = files
+      const externalized = await externalizeInlineCanvasImages(canvasId, elements, files)
+      if (externalized.updatedEntries.length > 0) {
+        effectiveFiles = externalized.nextFiles
+        excalidrawAPI?.addFiles(externalized.updatedEntries)
+      }
+
       const data: CanvasData = {
         elements,
         appState: {
           ...appState,
           collaborators: undefined!,
         },
-        files,
+        files: effectiveFiles,
       }
 
-      const thumbnail = pickCanvasThumbnailUrl(elements, files)
+      const thumbnail = pickCanvasThumbnailUrl(elements, effectiveFiles)
 
       try {
         await queueCanvasSave(canvasId, () =>
@@ -395,20 +406,90 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
     [excalidrawAPI]
   )
 
+  const addAudioEmbed = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (elementData: any, audioSrc: string) => {
+      if (!excalidrawAPI || !audioSrc) return
+      const existing = excalidrawAPI.getSceneElements()
+      if (existing.some((el) => el.id === elementData.id && !el.isDeleted)) {
+        return
+      }
+      const finalWidth = Number(elementData?.width) > 0 ? Number(elementData.width) : 360
+      const finalHeight = Number(elementData?.height) > 0 ? Number(elementData.height) : 108
+      const audioElements = convertToExcalidrawElements([
+        {
+          type: 'embeddable',
+          id: elementData.id,
+          x: Number(elementData.x) || 0,
+          y: Number(elementData.y) || 0,
+          width: finalWidth,
+          height: finalHeight,
+          link: audioSrc,
+          strokeColor: '#27272a',
+          backgroundColor: '#18181b',
+          fillStyle: 'solid',
+          strokeWidth: 1,
+          strokeStyle: 'solid',
+          roundness: null,
+          roughness: 0,
+          opacity: 100,
+          angle: 0,
+          seed: Math.floor(Math.random() * 1_000_000),
+          version: 1,
+          versionNonce: Math.floor(Math.random() * 1_000_000),
+          locked: false,
+          isDeleted: false,
+          groupIds: [],
+          boundElements: [],
+          updated: Date.now(),
+          frameId: null,
+          index: null,
+          customData: {
+            jaazMediaType: 'audio',
+            fileId: elementData.fileId || elementData.id,
+          },
+        },
+      ])
+      const currentElements = excalidrawAPI.getSceneElements()
+      if (currentElements.some((el) => el.id === elementData.id && !el.isDeleted)) {
+        return
+      }
+      excalidrawAPI.updateScene({
+        elements: [...currentElements, ...audioElements],
+      })
+      if (audioElements[0]) {
+        focusElementIfUserIdle(audioElements[0] as OrderedExcalidrawElement)
+      }
+    },
+    [excalidrawAPI, focusElementIfUserIdle]
+  )
+
   const renderEmbeddable = useCallback(
-    (element: NonDeleted<ExcalidrawEmbeddableElement>, appState: AppState) => {
+    (element: NonDeleted<ExcalidrawEmbeddableElement>, _appState: AppState) => {
       const { link } = element
+      const mediaKind = (element.customData as Record<string, unknown> | undefined)
+        ?.jaazMediaType
+
+      if (link && (mediaKind === 'audio' || isAudioUrl(link))) {
+        return (
+          <AudioElement
+            src={link}
+            width={element.width}
+            height={element.height}
+          />
+        )
+      }
 
       // Check if this is a video URL
       if (
         link &&
-        (link.includes('.mp4') ||
+        (mediaKind === 'video' ||
+          link.includes('.mp4') ||
           link.includes('.webm') ||
           link.includes('.ogg') ||
           link.startsWith('blob:') ||
           link.includes('video'))
       ) {
-        // Return the VideoPlayer component
         return (
           <VideoElement
             src={link}
@@ -418,8 +499,6 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         )
       }
 
-      console.log('👇 Not a video URL, returning null for:', link)
-      // Return null for non-video embeds to use default rendering
       return null
     },
     []
@@ -474,9 +553,17 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
             const elType = String(anyEl.type || '')
             const rawLink = typeof anyEl.link === 'string' ? anyEl.link : ''
             const fid = typeof anyEl.fileId === 'string' ? anyEl.fileId : element.id
-            const videoUrl = rawLink || savedFiles[fid]?.dataURL || ''
-            if ((elType === 'video' || (elType === 'embeddable' && isVideoUrl(videoUrl))) && videoUrl) {
-              await addVideoEmbed(anyEl, videoUrl)
+            const mediaUrl = rawLink || savedFiles[fid]?.dataURL || ''
+            if (
+              (elType === 'audio' || (elType === 'embeddable' && isAudioUrl(mediaUrl))) &&
+              mediaUrl
+            ) {
+              addAudioEmbed(anyEl, mediaUrl)
+            } else if (
+              (elType === 'video' || (elType === 'embeddable' && isVideoUrl(mediaUrl))) &&
+              mediaUrl
+            ) {
+              await addVideoEmbed(anyEl, mediaUrl)
             }
           }
         }
@@ -484,35 +571,37 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         console.error('Could not sync generated canvas media', error)
       }
     },
-    [addImageToExcalidraw, addVideoEmbed, canvasId, excalidrawAPI]
+    [addAudioEmbed, addImageToExcalidraw, addVideoEmbed, canvasId, excalidrawAPI]
   )
 
   const handleVideoGenerated = useCallback(
     (videoData: ISocket.SessionVideoGeneratedEvent) => {
-      console.log('👇 CanvasExcali received video_generated:', videoData)
-
-      // Only handle if it's for this canvas
-      if (videoData.canvas_id !== canvasId) {
-        console.log('👇 Video not for this canvas, ignoring')
-        return
-      }
-
-      // Create video embed element using the video URL
-      addVideoEmbed(videoData.element, videoData.video_url)
+      if (videoData.canvas_id !== canvasId) return
+      void addVideoEmbed(videoData.element, videoData.video_url)
     },
     [addVideoEmbed, canvasId]
+  )
+
+  const handleAudioGenerated = useCallback(
+    (audioData: ISocket.SessionAudioGeneratedEvent) => {
+      if (audioData.canvas_id !== canvasId) return
+      addAudioEmbed(audioData.element, audioData.audio_url)
+    },
+    [addAudioEmbed, canvasId]
   )
 
   useEffect(() => {
     eventBus.on('Socket::Session::ImageGenerated', handleImageGenerated)
     eventBus.on('Socket::Session::VideoGenerated', handleVideoGenerated)
+    eventBus.on('Socket::Session::AudioGenerated', handleAudioGenerated)
     eventBus.on('Canvas::SyncGeneratedImages', handleSyncGeneratedImages)
     return () => {
       eventBus.off('Socket::Session::ImageGenerated', handleImageGenerated)
       eventBus.off('Socket::Session::VideoGenerated', handleVideoGenerated)
+      eventBus.off('Socket::Session::AudioGenerated', handleAudioGenerated)
       eventBus.off('Canvas::SyncGeneratedImages', handleSyncGeneratedImages)
     }
-  }, [handleImageGenerated, handleSyncGeneratedImages, handleVideoGenerated])
+  }, [handleAudioGenerated, handleImageGenerated, handleSyncGeneratedImages, handleVideoGenerated])
 
   return (
     <div

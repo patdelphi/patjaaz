@@ -8,6 +8,7 @@ export enum SessionEventType {
   Info = 'info',
   ImageGenerated = 'image_generated',
   VideoGenerated = 'video_generated',
+  AudioGenerated = 'audio_generated',
   Delta = 'delta',
   ToolCall = 'tool_call',
   ToolCallArguments = 'tool_call_arguments',
@@ -47,6 +48,13 @@ export interface SessionVideoGeneratedEvent extends SessionBaseEvent {
   file: BinaryFileData & { duration?: number }
   canvas_id: string
   video_url: string
+}
+export interface SessionAudioGeneratedEvent extends SessionBaseEvent {
+  type: SessionEventType.AudioGenerated
+  element: any
+  file: BinaryFileData & { duration?: number }
+  canvas_id: string
+  audio_url: string
 }
 
 export interface SessionDeltaEvent extends SessionBaseEvent {
@@ -103,6 +111,7 @@ export type SessionUpdateEvent =
   | SessionToolCallProgressEvent
   | SessionImageGeneratedEvent
   | SessionVideoGeneratedEvent
+  | SessionAudioGeneratedEvent
   | SessionAllMessagesEvent
   | SessionDoneEvent
   | SessionErrorEvent

@@ -262,8 +262,9 @@
 
 ### 已确认决策
 
-- Agent 引擎采用 earendil-works/pi，新增 Node Agent 服务（M2 实施）。
-- Agent 服务目录为仓库根目录 `agent/`，与前端共享 `packages/shared`（事件与工具 schema）。
+- ~~Agent 引擎采用 earendil-works/pi，新增 Node Agent 服务（M2 实施）。~~
+- ~~Agent 服务目录为仓库根目录 `agent/`，与前端共享 `packages/shared`（事件与工具 schema）。~~
+  - **2026-11-25 决策变更**：忽略/取消更换 `pi` Agent 引擎任务，保留现有 Python LangGraph 分组智能体架构，将画布编排工具、指向式标注与长会话压缩直接在现有 Python 服务上迭代。
 - 画布继续使用 Excalidraw，按 7.4 与 `Docs/06-Jaaz AIGC无限画布详细技术设计.md` 第 4 节增强。
 
 ### 执行结果与未执行项（2026-11-24）
@@ -282,7 +283,7 @@
 
 ## M1 主体：去云端 + ComfyUI 外部文件组工作流与多实例能力层 + 三协议模型（2026-11-24 已完成待确认提交）
 
-依据：`Docs/04-Jaaz AIGC无限画布深度分析与规划.md` 第 2.3、7.1、7.2、7.10、9 节及 `Docs/06-Jaaz AIGC无限画布详细技术设计.md` 第 1.2、3 节（含新增 3.6 外部文件组工作流包规范）。本轮完成后，不配置任何云端 Key，仅用本地/线上 ComfyUI + 任一开放 LLM 即可完成生图、编辑、视频/TTS 与工具开关管理；M2 `pi` Agent 迁移在下一轮开展。
+依据：`Docs/04-Jaaz AIGC无限画布深度分析与规划.md` 第 2.3、7.1、7.2、7.10、9 节及 `Docs/06-Jaaz AIGC无限画布详细技术设计.md` 第 1.2、3 节（含新增 3.6 外部文件组工作流包规范）。本轮完成后，不配置任何云端 Key，仅用本地/线上 ComfyUI + 任一开放 LLM 即可完成生图、编辑、视频/TTS 与工具开关管理（注：M2 `pi` Agent 替换已于 2026-11-25 取消）。
 
 ### 范围
 
@@ -338,3 +339,60 @@
 1. **工作流文件组目录**：固定在项目内目录 `<repo_root>/workflows/`，兼容 `<dir>/{workflow.api.json, jaaz.workflow.json}` 与 `<name>.api.json + <name>.jaaz.json`；禁用工作流从 `tool_service`（Agent）和 `/api/list_tools` 同时隐藏。
 2. **清理与迁移**：已批准删除废弃云端/Magic/Knowledge/MCP 文件、执行 SQLite v4 迁移（自动备份 `localmanus.db`）、从 `react/package.json` 移除未使用的 `tldraw` 和 `posthog-js`。
 3. **阶段 5 接入方案**：选定方案 A（零新增 Python 依赖，使用已安装的 `anthropic` 与 `httpx` 实现原生 Claude / Gemini REST `BaseChatModel` 适配）。
+
+---
+
+## 画质参数修复 + 流水线闭环 + Stage C 工程治理与画布交互增强（2026-11-25 已完成，不含桌面端打包与换 Agent）
+
+### 范围
+- 优先修复 `text2image_minimax_h3` 等工作流出图过曝与参数调用问题，并在线上 ComfyUI 实测对比验证。
+- 补齐上传 SHA-256 缓存过期自动重传（R-10）、音频元素落盘画布（C5）、PNG/SVG 画布导出合成视频封面帧及粘贴内联 Base64 图片自动外置（C2）。
+- 完成前端 Vite 分包（R-21）、开启 `noUnusedLocals`/`noUnusedParameters`（R-22）、日志脱敏（R-18）、LLM `usage_metadata` 与客户端复用（R-11）、工作流 `mtime` 缓存（R-25）、系统提示词后端持久化（R-26）、本地假 ComfyUI 联调测试与单测提速（R-23/R-24）。
+- 补齐画布顶部生成进度浮层（C4）、悬浮栏 AI 快捷动作菜单（E9）、自动递增序号标注（E5）及 `Docs/08~11` 工程文档（R-28）。
+- 按用户要求排除桌面端打包安装测试与 Agent 引擎替换。
+
+### 完成与验证记录
+- [x] 出图画质修复与线上实测：`text2image_minimax_h3` 的 `KSampler` `cfg` 由 `8` 修正为 `1`（`steps: 8`），`megapixels` 默认值调至 `2.0`、`enable_prompt_enhancer` 默认设为 `false`；线上 Colab ComfyUI 同题词重新生成 `BmohWDeQnC.png`，高光自然、发丝与织物细节清晰。
+- [x] 批次一流水线闭环：上传缓存失效单次自动重传、音频卡片写入画布与广播、PNG/SVG 导出视频帧合成、粘贴 `data:image/*` 自动上传外置。
+- [x] 批次二工程治理：前端 `tsc -b && vite build` 零报错通过（入口包 327.75 kB），后端全量单测提速至 9 秒内并新增本地假 ComfyUI HTTP+WS 测试。
+- [x] 批次三画布交互与文档：完成 `CanvasGenerationOverlay`、`CanvasQuickActions`、`calloutBadge` 及 `Docs/08-requirements.md`、`Docs/09-api.md`、`Docs/10-deployment.md`、`Docs/11-changelog.md`（全部 UTF-8 BOM + CRLF）。
+---
+
+## 14 套工作流全量审查、SenseNova U1.6 接入与 9 轮全流程自动画布实测（2026-11-25 已完成）
+
+### 完成与验证记录
+- [x] 全量工作流参数与节点校准：逐一审查修正 12 套既有工作流（MiniMax H3 图像切换 `qwen3vl_32b_minimax_h3_nvfp4_awq` 适配 24GB 显存、`4.0 MP`、`cfg=1`、多图编辑锁定 `enable_prompt_enhancer=false` 保护 `<Picture N>` 标签；视频工作流统一 `0.98 MP` 768p、清理失效预览节点并将 `SaveVideo` 输出前缀统一归入 `video/` 目录）。
+- [x] SenseNova U1.6 双工作流导入与种子兼容：导入并启用 `text2image_sensenova_u16` 与 `image_edit_sensenova_u16`，在 `comfy_dynamic.py` 支持独立 `PrimitiveInt`（标题含 `seed`/`种子`）随机种子注入。
+- [x] 视频输入上传与反向代理执行加固：将 `video`/`audio` 输入文件上传至 ComfyUI `input/` 根目录以通过 `LoadVideo`/`LoadAudio` 的 `COMBO` 校验；为 `WorkflowExecution.connect()` 增加 3 次握手重连与 `/history` 降级轮询；启用 `video_upscale_seedvr2_3b`。
+- [x] 工作流完整手册与单画布 9 轮复杂实测：编写 `Docs/12-ComfyUI工作流完整使用说明.md`；在单画布 `auto-flow-tea-film-2026`（会话 `sess-tea-film-2026`）通过 `chat_service` 串行跑通文生图、单图改字改物、双图融合改图、首帧有声出视频、双参考重拍改视频（含中文台词）、SeedVR2 裁剪 + 1.5× 2K 超分精修与制片清单复盘，129 个画布元素零重叠，后端 109 项单测全部通过。
+
+---
+
+## 后续待优化与功能演进计划（2026-11-25 更新，忽略更换 Agent 引擎）
+
+> 范围约束：不更换现有 Python LangGraph 智能体引擎，不做桌面端安装包实测；所有后续能力均在现有 FastAPI + LangGraph + Excalidraw 架构上渐进演进。
+
+### 阶段 P1：实测暴露的执行链路与消息持久化加固（高优先级）
+- [ ] **子图工具调用即时落库**：改造 `StreamProcessor.py`，在工具节点返回成功结果时即时幂等写入 `chat_messages`，避免 ComfyUI 已出图落盘后因收尾总结请求偶发 `429` 或网络抖动导致对话侧缺失工具记录。
+- [ ] **ComfyUI 中间预览输出过滤**：在 `comfyui_execution.py` / `comfy_dynamic.py` 支持按 `jaaz.workflow.json` 的 `outputs` 节点白名单或终端保存节点类型（`SaveImage`、`SaveVideo`、`SaveAudio`、`VHS_VideoCombine`）过滤输出，剔除 `LoadVideo` / `LoadImage` 等输入节点的中间预览文件。
+- [ ] **实例跨模型家族显存自动释放**：在 `comfy_instance_service` 记录实例最近一次执行的工作流模型家族，跨大模型家族（如 SenseNova ↔ MiniMax H3 ↔ SeedVR2）切换前按配置自动触发 `/api/free`，降低 24GB 显存环境冷切换时的内存交换耗时。
+
+### 阶段 P2：Python Agent 原生画布编排工具与上下文精简（原 M2 有价值项迁入）
+- [ ] **画布图形与排版工具集（A2）**：在后端新增 `canvas_arrange` / `canvas_annotate` 等 LangChain 工具并经 Socket.IO 同步前端，支持通过自然语言让 LLM 直接创建 `Frame` 分镜泳道、写入分镜文字框、重排缩放媒体卡片及绘制带标签流转箭头与序号角标。
+- [ ] **序号角标指向式局部指令（A3）**：识别画布 `callout-badge`（`①`、`②`…）所贴附的底层图像元素与相对位置，自动注入 `<canvas_scene_context>`，支持“在图片 ① 号标记处增加暖光纸灯笼”等指向式改图。
+- [ ] **长会话历史滑窗与参数折叠（A9）**：当单会话超过设定轮数时，自动折叠早期 `write_plan` 与冗长工具参数，控制上下文 Token 规模并减少上游模型限流。
+
+### 阶段 P3：画布深度交互、资产血缘谱系与大画布性能（M3–M4 进阶）
+- [ ] **局部重绘涂抹遮罩与对比导出（G2 / E8 / X1）**：提供画布外层画笔涂抹遮罩（Mask）导出透明通道 PNG 对接 ComfyUI Inpaint 工作流；补齐改图前后滑块对比（Before/After）、图片翻转/圆角及按 `Frame` 批量多格式倍率导出（PNG/JPG/WebP/PDF）。
+- [ ] **生成血缘谱系与一键重抽（C9）**：在图像/视频元素 `customData` 中记录生成工作流、Prompt、Seed 与上游输入 `file_id`，悬浮栏支持查看生成参数、同参数/换种子重新生成及高亮显示上下游血缘连线。
+- [ ] **增量同步、图层快照与大画布减负（C1 / C7 / C10 / C11）**：以元素级 `op` 增量同步替代整包画布 JSON 保存；补充图层面板（显隐/锁定/排序）与画布历史快照回退；实现视口外视频自动暂停与按缩放比加载缩略图。
+
+### 阶段 P4：资产库、配音成片合成与大文件拆分治理（M4–M5 & Stage C 尾项）
+- [ ] **跨画布资产与形状模板侧边栏（M1 / E10）**：按提示词、工作流与画布检索历史图片/视频/音频，支持一键拖入当前画布及保存常用标注组合模板。
+- [ ] **脚本卡 TTS 配音与 `ffmpeg` 分镜合成（V3 / V4）**：接入 TTS 工作流/API 实现选中画布文字框一键生成配音卡片，并提供后端 `ffmpeg` 多镜头视频拼接、音轨混音与字幕压制成片工具。
+- [ ] **表格变量批量生成与流程模板化（W1 / W2）**：支持粘贴多行变量/CSV 批量调用工作流并自动按网格排入目标 `Frame`。
+- [ ] **后端超长模块拆分与统一日志（R-17 / R-19）**：按职责拆分超 750 行的 `comfy_workflow_pack.py`、`db_service.py`、`comfyui_router.py`、`llm_adapters.py`，并将残余 `print` 收敛至带脱敏过滤器的标准 `logging`。
+
+### 完成标准
+- 阶段 P1–P4 任一子项落地均需配套后端 `unittest` 或前端 `vitest` 回归用例，保持 `tsc -b && vite build` 与 `git diff --check` 零报错。
+- 实机回归画布验证：多轮对话断网/限流不丢已执行工具消息，`video_upscale_seedvr2_3b` 等含 `LoadVideo` 工作流仅落盘单一成片，Agent 可纯靠聊天指令自动完成分镜框与流转箭头排版。

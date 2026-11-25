@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { parseWritePlanSteps } from '@/lib/writePlan'
 import { ChevronDown, ChevronRight, FileText, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'

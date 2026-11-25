@@ -7,7 +7,7 @@
   "enabled": true,
   "instance_id": "",
   "seed_strategy": "random",
-  "description": "**描述：** 使用 MiniMax H3 根据文字脚本/分镜提示词生成同时包含画面与原生同步音频的视频（24 fps，当前工作流未接首尾帧图片）。\n\n**必填参数：**\n- positive_prompt：视频分镜、主体动作、场景光影、镜头运动与音效/台词描述（支持中英文分镜脚本）。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传 ResolutionSelector 完整枚举值，默认 \"16:9 (Widescreen)\"。\n- megapixels：视频帧分辨率像素档，默认 0.4（建议保持 0.4–0.98 避免显存溢出）。\n- duration_seconds：目标视频时长（秒），默认 15.0（工作流自动换算为适配的采样帧数）。\n- enable_lightning_lora：是否开启 8 步 Lightning Turbo LoRA 加速，默认 false（false=20 步标准采样，true=8 步快速采样）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16、qwen3vl_32b_minimax_h3_nvfp4_awq、minimax_h3_video_vae_int8_convrot 与 minimax_h3_audio_vae_fp32；采样器固定 res_multistep、simple、denoise 1，seed 随机。",
+  "description": "**描述：** 使用 MiniMax H3 FL2VA 根据文字脚本/分镜提示词生成同时包含画面与原生立体声同步音频的视频（24 fps）。\n\n**必填参数：**\n- positive_prompt：视频分镜、主体动作、场景光影、镜头运动与对白/音效/配乐描述（支持中英文）。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传 ResolutionSelector 完整枚举值，默认 \"16:9 (Widescreen)\"。\n- megapixels：视频帧分辨率像素档，默认 0.98（官方原生 768p 标准档 1344x768）。\n- duration_seconds：目标视频时长（秒），默认 5.0（支持 5.0–15.0，工作流自动按 24fps 对齐 17k+5 帧网格）。\n- enable_lightning_lora：是否开启 8 步 Turbo LoRA 加速，默认 true（true=8 步高速采样，false=20 步高细节完整采样）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16、qwen3vl_32b_minimax_h3_nvfp4_awq 与音视频双 VAE；采样器固定 res_multistep、simple、BasicGuider（CFG=1）、denoise 1，seed 随机。",
   "inputs": [
     {
       "name": "positive_prompt",
@@ -43,8 +43,8 @@
       "required": false,
       "node_id": "115",
       "node_input_name": "megapixels",
-      "default_value": 0.4,
-      "description": "可选。输出分辨率像素档位（单位百万像素 MP），视频推荐 0.4–0.98，默认 0.4。"
+      "default_value": 0.98,
+      "description": "可选。输出分辨率像素档位（单位 MP），默认 0.98（对应官方原生 1344x768 768p 高清画幅）。"
     },
     {
       "name": "duration_seconds",
@@ -52,8 +52,8 @@
       "required": false,
       "node_id": "140:133",
       "node_input_name": "value",
-      "default_value": 15.0,
-      "description": "可选。视频时长（秒），默认 15.0；短片常用 5.0–15.0。"
+      "default_value": 5.0,
+      "description": "可选。视频时长（秒），默认 5.0；长镜头或多镜脚本可传 8.0–15.0。"
     },
     {
       "name": "enable_lightning_lora",
@@ -61,8 +61,8 @@
       "required": false,
       "node_id": "140:139",
       "node_input_name": "value",
-      "default_value": false,
-      "description": "可选。true 开启 8 步 Turbo LoRA 加速，false 使用 20 步完整采样；默认 false。"
+      "default_value": true,
+      "description": "可选。true 开启 8 步 FL2V v1.0 Turbo LoRA 高速采样（推荐日常使用），false 切至 20 步完整采样（更高细节但耗时约 2.5 倍）；默认 true。"
     }
   ],
   "outputs": null,

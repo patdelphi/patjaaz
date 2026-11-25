@@ -3,7 +3,6 @@ import { Hotkey } from '@/components/ui/hotkey'
 import { useCanvas } from '@/contexts/canvas'
 import { eventBus, TCanvasAddImagesToChatEvent } from '@/lib/event'
 import { useKeyPress } from 'ahooks'
-import { motion } from 'motion/react'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 

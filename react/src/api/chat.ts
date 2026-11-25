@@ -1,6 +1,6 @@
 import { apiFetch } from '@/lib/apiFetch'
 import { Message, Model } from '@/types/types'
-import { ModelInfo, ToolInfo } from './model'
+import { ToolInfo } from './model'
 
 export const getChatSession = async (sessionId: string) => {
   const response = await apiFetch(`/api/chat_session/${sessionId}`)

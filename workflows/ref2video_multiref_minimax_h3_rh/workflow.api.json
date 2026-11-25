@@ -64,7 +64,7 @@
   "8": {
     "inputs": {
       "image": [
-        "5",
+        "4",
         0
       ]
     },
@@ -78,7 +78,7 @@
   "9": {
     "inputs": {
       "image": [
-        "4",
+        "5",
         0
       ],
       "references": [
@@ -230,7 +230,7 @@
   },
   "16": {
     "inputs": {
-      "filename_prefix": "minimax_h3/ref2va_image",
+      "filename_prefix": "video/MiniMax_H3_ref2va_rh",
       "format": "mp4",
       "format.codec": "h264",
       "format.codec.encoding": "auto",

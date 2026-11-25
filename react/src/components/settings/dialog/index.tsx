@@ -1,19 +1,15 @@
 import CommonDialogContent from '@/components/common/DialogContent'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogFooter } from '@/components/ui/dialog'
+import { Dialog } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { useConfigs } from '@/contexts/configs'
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import SettingProviders from './providers'
 import SettingProxy from './proxy'
 import SettingSidebar, { SettingSidebarType } from './sidebar'
-import { X } from 'lucide-react'
 
 const SettingsDialog = () => {
   const { showSettingsDialog: open, setShowSettingsDialog } = useConfigs()
-  const { t } = useTranslation()
   const [current, setCurrent] = useState<SettingSidebarType>('provider')
 
   const renderContent = () => {

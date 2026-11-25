@@ -29,26 +29,6 @@
       "ver": "0.28.0"
     }
   },
-  "106": {
-    "inputs": {
-      "fps": 24,
-      "images.image0": [
-        "73",
-        0
-      ],
-      "images.image1": [
-        "76",
-        0
-      ]
-    },
-    "class_type": "ImageCompareKJ",
-    "_meta": {
-      "title": "Image Compare KJ",
-      "cnr_id": "comfyui-kjnodes",
-      "aux_id": "kijai/ComfyUI-KJNodes",
-      "ver": "b23194124ef9751eb27cd1fb6aa7858080e692ac"
-    }
-  },
   "66:48": {
     "inputs": {
       "tile_size": 512,
@@ -151,7 +131,7 @@
   "66:57": {
     "inputs": {
       "resize_type": "scale by multiplier",
-      "resize_type.multiplier": 2.5,
+      "resize_type.multiplier": 2.0,
       "scale_method": "lanczos",
       "input": [
         "66:74",
@@ -297,7 +277,7 @@
   },
   "66:99": {
     "inputs": {
-      "temporal_overlap": 0,
+      "temporal_overlap": 8,
       "chunking_mode": "auto",
       "latent": [
         "66:48",

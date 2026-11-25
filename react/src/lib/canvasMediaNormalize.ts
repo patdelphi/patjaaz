@@ -32,11 +32,18 @@ type GenericFileMap = Record<
   | undefined
 >
 
-const VIDEO_EXT_RE = /\.(mp4|webm|ogg|mov)(\?|$)/i
+const VIDEO_EXT_RE = /\.(mp4|webm|mov)(\?|$)/i
+const AUDIO_EXT_RE = /\.(mp3|wav|flac|m4a|aac)(\?|$)/i
+
+export function isAudioUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false
+  return AUDIO_EXT_RE.test(url)
+}
 
 export function isVideoUrl(url?: string | null): boolean {
   if (!url || typeof url !== 'string') return false
-  return VIDEO_EXT_RE.test(url) || url.startsWith('blob:') || url.includes('video')
+  if (isAudioUrl(url)) return false
+  return VIDEO_EXT_RE.test(url) || /\.ogg(\?|$)/i.test(url) || url.startsWith('blob:') || url.includes('video')
 }
 
 export function extractApiFilename(url?: string | null): string | null {
@@ -92,7 +99,44 @@ export function normalizeSingleVideoElement<T extends GenericElement>(
   } as T
 }
 
-/** 归一化画布初始数据中的全部后台视频元素，修复重新打开画布时视频不显示问题。 */
+/** 将后端落盘的 type='audio' 元素转换为 Excalidraw 可渲染的 embeddable 音频卡片元素。 */
+export function normalizeSingleAudioElement<T extends GenericElement>(
+  element: T,
+  files?: GenericFileMap
+): T {
+  if (!element || element.type !== 'audio') return element
+  const fileId = typeof element.fileId === 'string' ? element.fileId : element.id
+  const fileEntry = fileId && files ? files[fileId] : undefined
+  const link =
+    (typeof element.link === 'string' && element.link) ||
+    fileEntry?.dataURL ||
+    null
+  if (!link) return element
+
+  const width = Number(element.width) > 0 ? Number(element.width) : 360
+  const height = Number(element.height) > 0 ? Number(element.height) : 108
+
+  return {
+    ...element,
+    type: 'embeddable',
+    width,
+    height,
+    link,
+    backgroundColor: '#18181b',
+    fillStyle: 'solid',
+    locked: false,
+    groupIds: Array.isArray(element.groupIds) ? element.groupIds : [],
+    boundElements: Array.isArray(element.boundElements) ? element.boundElements : [],
+    updated: Number(element.updated) || Date.now(),
+    customData: {
+      ...(element.customData || {}),
+      jaazMediaType: 'audio',
+      fileId,
+    },
+  } as T
+}
+
+/** 归一化画布初始数据中的全部后台视频与音频元素，修复重新打开画布时媒体不显示问题。 */
 export function normalizeCanvasElementsForScene<T extends GenericElement>(
   elements?: ReadonlyArray<T> | null,
   files?: GenericFileMap
@@ -102,6 +146,11 @@ export function normalizeCanvasElementsForScene<T extends GenericElement>(
   const next = elements.map((elem) => {
     if (elem?.type === 'video') {
       const converted = normalizeSingleVideoElement(elem, files)
+      if (converted !== elem) changed = true
+      return converted
+    }
+    if (elem?.type === 'audio') {
+      const converted = normalizeSingleAudioElement(elem, files)
       if (converted !== elem) changed = true
       return converted
     }
@@ -247,6 +296,23 @@ export function collectSelectedCanvasContextForChat(
       seenTextNodeIds.add(el.id)
       const raw = String(el.text || '').trim()
       if (raw) texts.push(raw)
+      continue
+    }
+
+    if (
+      (el.type === 'audio' ||
+        (el.type === 'embeddable' &&
+          (isAudioUrl(el.link) || el.customData?.jaazMediaType === 'audio'))) &&
+      effectiveIds.has(el.id)
+    ) {
+      const fid = typeof el.fileId === 'string' ? el.fileId : el.id
+      const url =
+        (typeof el.link === 'string' && el.link) ||
+        (fid ? files[fid]?.dataURL : undefined)
+      const apiFileName = extractApiFilename(url)
+      if (apiFileName) {
+        texts.push(`[画布音频引用: file_id="${apiFileName}"]`)
+      }
       continue
     }
 

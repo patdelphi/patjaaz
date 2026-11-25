@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 from models.tool_model import ToolInfoJson
 from services.db_service import db_service
 from services.langgraph_service import langgraph_multi_agent
+from services.settings_service import settings_service
 from services.websocket_service import send_to_websocket
 from services.stream_service import (
     add_stream_task,
@@ -48,8 +49,12 @@ async def handle_chat(data: Dict[str, Any]) -> None:
 
     print('👇 chat_service got tool_list', tool_list)
 
-    # TODO: save and fetch system prompt from db or settings config
+    # 若请求未传自定义系统提示词，则回退读取服务端 settings 持久化配置
     system_prompt: Optional[str] = data.get('system_prompt')
+    if not system_prompt:
+        saved_prompt = settings_service.get_raw_settings().get('system_prompt')
+        if isinstance(saved_prompt, str) and saved_prompt.strip():
+            system_prompt = saved_prompt.strip()
 
     # 空消息列表（例如仅新建空白画布）无需启动智能体会话。
     if not messages:

@@ -4,10 +4,10 @@
   "display_name": "MiniMax H3 双图首尾帧生视频",
   "capability": "i2v",
   "output_kind": "video",
-  "enabled": true,
+  "enabled": false,
   "instance_id": "",
   "seed_strategy": "random",
-  "description": "**描述：** 分别指定起始首帧与结束尾帧两张图片，由 MiniMax H3 FL2VA 生成首尾平滑过渡且含原生音频的视频（24 fps）。\n\n**必填参数：**\n- first_frame_image：必填，视频起始首帧图片文件名（节点 114，对应提示词中的 `<Picture 1>`）。\n- last_frame_image：必填，视频结束尾帧图片文件名（节点 127，对应提示词中的 `<Picture 2>`）。\n- positive_prompt：必填，描述从首帧到尾帧之间的动作演变、转场运镜和声音变化。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传完整枚举字符串，默认 \"1:1 (Square)\"。\n- megapixels：分辨率像素档，默认 0.4。\n- duration_seconds：时长（秒），默认 5.0。\n- enable_lightning_lora：是否开启 8 步 Turbo LoRA，默认 false（20 步质量采样）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、8 步 Turbo LoRA、Qwen3VL-32B 与音视频双 VAE，seed 随机生成。",
+  "description": "**描述：** 分别指定起始首帧与结束尾帧两张图片，由 MiniMax H3 FL2VA 生成首尾平滑过渡且含原生立体声音频的视频（24 fps）。\n\n**必填参数：**\n- first_frame_image：必填，视频起始首帧图片文件名（节点 114，对应提示词中的 `<Picture 1>`）。\n- last_frame_image：必填，视频结束尾帧图片文件名（节点 127，对应提示词中的 `<Picture 2>`）。\n- positive_prompt：必填，描述从 `<Picture 1>` 到 `<Picture 2>` 之间的动作演变、转场运镜和声音变化。\n\n**可选参数：**\n- aspect_ratio：画幅比例，必须原样传完整枚举字符串，请与首尾帧图片比例保持一致，默认 \"1:1 (Square)\"。\n- megapixels：分辨率像素档，默认 0.98（官方原生 768p 标准档）。\n- duration_seconds：时长（秒），默认 5.0（支持 5.0–15.0）。\n- enable_lightning_lora：是否开启 8 步 FL2V v1.0 Turbo LoRA，默认 true（false 切至 20 步完整采样）。\n\n**模型与固定设置：** 内置 minimax_h3_fl2va_pruned_int8_convrot、8 步 Turbo LoRA、Qwen3VL-32B 与音视频双 VAE，seed 随机生成。",
   "inputs": [
     {
       "name": "first_frame_image",
@@ -61,8 +61,8 @@
       "required": false,
       "node_id": "115",
       "node_input_name": "megapixels",
-      "default_value": 0.4,
-      "description": "可选。输出分辨率像素档位（单位百万像素 MP），视频推荐 0.4–0.98，默认 0.4。"
+      "default_value": 0.98,
+      "description": "可选。输出分辨率像素档位（单位 MP），默认 0.98（对应官方原生 768p 高清档）。"
     },
     {
       "name": "duration_seconds",
@@ -79,8 +79,8 @@
       "required": false,
       "node_id": "105:126",
       "node_input_name": "value",
-      "default_value": false,
-      "description": "可选。true 开启 8 步 Turbo LoRA，false 为 20 步采样；默认 false。"
+      "default_value": true,
+      "description": "可选。true 开启 8 步 Turbo LoRA 高速采样，false 为 20 步采样；默认 true。"
     }
   ],
   "outputs": null,
