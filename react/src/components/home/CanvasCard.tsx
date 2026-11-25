@@ -1,4 +1,5 @@
 import { deleteCanvas, ListCanvasesResponse } from '@/api/canvas'
+import { isVideoUrl } from '@/lib/canvasMediaNormalize'
 import { ImageIcon, Trash2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
@@ -40,7 +41,7 @@ const CanvasCard: React.FC<CanvasCardProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="border border-primary/20 rounded-xl cursor-pointer hover:border-primary/40 transition-all duration-300 hover:shadow-md hover:bg-primary/5 active:scale-99 relative group"
+      className="jaaz-card-contain border border-primary/20 rounded-xl cursor-pointer hover:border-primary/40 transition-all duration-300 hover:shadow-md hover:bg-primary/5 active:scale-99 relative group"
     >
       <CanvasDeleteDialog
         show={showDeleteDialog}
@@ -50,9 +51,10 @@ const CanvasCard: React.FC<CanvasCardProps> = ({
         <Button
           variant="secondary"
           size="icon"
+          aria-label={t('common:buttons.delete', 'Delete canvas')}
           className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
         >
-          <Trash2 className="w-4 h-4" />
+          <Trash2 className="w-4 h-4" aria-hidden="true" />
         </Button>
       </CanvasDeleteDialog>
 
@@ -61,11 +63,25 @@ const CanvasCard: React.FC<CanvasCardProps> = ({
         onClick={() => handleCanvasClick(canvas.id)}
       >
         {canvas.thumbnail ? (
-          <img
-            src={canvas.thumbnail}
-            alt={canvas.name}
-            className="w-full h-40 object-cover rounded-lg"
-          />
+          isVideoUrl(canvas.thumbnail) ? (
+            <video
+              src={canvas.thumbnail}
+              muted
+              playsInline
+              width={320}
+              height={160}
+              preload="metadata"
+              {...({ loading: 'lazy' } as Record<string, unknown>)}
+              className="w-full h-40 object-cover rounded-lg"
+            />
+          ) : (
+            <img
+              src={canvas.thumbnail}
+              alt={canvas.name}
+              loading="lazy"
+              className="w-full h-40 object-cover rounded-lg"
+            />
+          )
         ) : (
           <div className="w-full h-40 bg-primary/10 rounded-lg flex items-center justify-center">
             <ImageIcon className="w-10 h-10 opacity-10" />

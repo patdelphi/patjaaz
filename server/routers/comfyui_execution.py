@@ -278,23 +278,30 @@ class WorkflowExecution:
                 raise ComfyUIExecutionError(message) from exc
 
     async def _fetch_history_outputs(self) -> bool:
-        """查询 /history/{prompt_id}，若已完成则回填输出 URL 并返回 True。"""
+        """查询 /history/{prompt_id}，若已完成则回填输出 URL 并返回 True；加载大模型阻塞事件循环导致瞬时超时时安全返回 False。"""
         if not self.prompt_id:
             return False
-        async with HttpClient.create(timeout=10.0) as client:
-            response = await client.get(
-                build_comfy_http_url(self.base_url, f"/history/{self.prompt_id}"),
-                headers=self.headers or None,
+        try:
+            async with HttpClient.create(timeout=20.0) as client:
+                response = await client.get(
+                    build_comfy_http_url(self.base_url, f"/history/{self.prompt_id}"),
+                    headers=self.headers or None,
+                )
+                if response.status_code != 200:
+                    return False
+                response_body = response.json()
+                if isinstance(response_body, dict) and self.prompt_id in response_body:
+                    # 反向代理或 WS 断连时从完成记录恢复所有媒体输出
+                    for url in history_output_urls(response_body[self.prompt_id], self.base_url):
+                        if url not in self.outputs:
+                            self.outputs.append(url)
+                    return True
+        except (httpx.HTTPError, asyncio.TimeoutError, OSError, ValueError) as exc:
+            print(
+                f"[comfyui_execution] Transient history probe error for {self.prompt_id}: "
+                f"{type(exc).__name__}: {exc}"
             )
-            if response.status_code != 200:
-                return False
-            response_body = response.json()
-            if isinstance(response_body, dict) and self.prompt_id in response_body:
-                # 反向代理或 WS 断连时从完成记录恢复所有媒体输出
-                for url in history_output_urls(response_body[self.prompt_id], self.base_url):
-                    if url not in self.outputs:
-                        self.outputs.append(url)
-                return True
+            return False
         return False
 
     async def _poll_history_until_done(self, deadline: float) -> None:
@@ -334,7 +341,7 @@ class WorkflowExecution:
                     if await self._fetch_history_outputs():
                         return
                     continue
-                except (websockets.ConnectionClosed, OSError):
+                except (websockets.ConnectionClosed, websockets.WebSocketException, OSError):
                     if await self._fetch_history_outputs():
                         return
                     await self._poll_history_until_done(deadline)

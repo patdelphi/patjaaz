@@ -267,5 +267,96 @@ class WorkflowPackIntegrityTests(unittest.TestCase):
         self.assertEqual(dual_api["87"]["inputs"]["model"], ["105", 0])
 
 
+class CanvasSaveRaceMergeTests(unittest.TestCase):
+    def test_preserves_unseen_server_generated_media_on_stale_frontend_save(self):
+        existing = {
+            "elements": [
+                {"id": "txt_1", "type": "text", "text": "旧文案", "isDeleted": False},
+                {"id": "im_new12345", "type": "video", "fileId": "im_new12345", "isDeleted": False, "link": "/api/file/out.mp4"},
+            ],
+            "files": {
+                "im_new12345": {"id": "im_new12345", "dataURL": "/api/file/out.mp4", "created": 1000},
+            },
+        }
+        incoming = {
+            "elements": [
+                {"id": "txt_1", "type": "text", "text": "用户刚改的文案", "isDeleted": False},
+            ],
+            "files": {},
+        }
+        merged = canvas_router.merge_canvas_data_preserving_unseen_media(existing, incoming, now_ms=2000)
+        ids = [e["id"] for e in merged["elements"]]
+        self.assertEqual(ids, ["txt_1", "im_new12345"])
+        self.assertEqual(merged["elements"][0]["text"], "用户刚改的文案")
+        self.assertIn("im_new12345", merged["files"])
+
+    def test_does_not_resurrect_explicitly_deleted_server_media(self):
+        existing = {
+            "elements": [
+                {"id": "im_del12345", "type": "image", "fileId": "im_del12345", "isDeleted": False},
+            ],
+            "files": {
+                "im_del12345": {"id": "im_del12345", "dataURL": "/api/file/a.png", "created": 1000},
+            },
+        }
+        incoming = {
+            "elements": [
+                {"id": "im_del12345", "type": "image", "fileId": "im_del12345", "isDeleted": True},
+            ],
+            "files": {},
+        }
+        merged = canvas_router.merge_canvas_data_preserving_unseen_media(existing, incoming, now_ms=2000)
+        self.assertEqual(len(merged["elements"]), 1)
+        self.assertTrue(merged["elements"][0]["isDeleted"])
+
+    def test_allows_clearing_old_canvas_to_empty_array(self):
+        existing = {
+            "elements": [
+                {"id": "im_old12345", "type": "image", "fileId": "im_old12345", "isDeleted": False},
+            ],
+            "files": {
+                "im_old12345": {"id": "im_old12345", "dataURL": "/api/file/old.png", "created": 1_000},
+            },
+        }
+        incoming = {"elements": [], "files": {}}
+        merged = canvas_router.merge_canvas_data_preserving_unseen_media(
+            existing, incoming, now_ms=500_000
+        )
+        self.assertEqual(merged["elements"], [])
+
+
+class ComfyHistoryTransientTimeoutAndSpaRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fetch_history_outputs_swallows_transient_read_timeout(self):
+        import httpx
+        from routers.comfyui_execution import WorkflowExecution
+
+        wf_exec = WorkflowExecution({}, "http://127.0.0.1:8188", False, None, False)
+        wf_exec.prompt_id = "pid-timeout-test"
+
+        class _TimeoutClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def get(self, *args, **kwargs):
+                raise httpx.ReadTimeout("")
+
+        with patch("routers.comfyui_execution.HttpClient.create", return_value=_TimeoutClient()):
+            done = await wf_exec._fetch_history_outputs()
+        self.assertFalse(done)
+
+    def test_spa_routes_registered_for_canvas_and_assets(self):
+        import main as server_main
+
+        paths = {getattr(r, "path", None) for r in server_main.app.routes}
+        self.assertIn("/", paths)
+        self.assertIn("/canvas/{canvas_id}", paths)
+        self.assertIn("/assets", paths)
+
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -59,7 +59,7 @@ async def append_outputs_to_canvas(
                 )
             elif mime_type.startswith("video"):
                 element = await generate_new_video_element(
-                    canvas_id, file_id, size, canvas_data=data
+                    canvas_id, file_id, {**size, "url": url}, canvas_data=data
                 )
             if element is None:
                 continue

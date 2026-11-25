@@ -14,8 +14,10 @@
   display: none !important;
 }
 
-/* 选中内嵌视频元素时隐藏左侧原生样式面板 */
-.excalidraw.hide-left-panel .App-menu__left {
+/* 选中内嵌视频元素时隐藏左侧原生样式面板、原生超链接浮层与默认双击遮罩提示，让底部视频控制栏直接可点且画面可直接拖动 */
+.excalidraw.hide-left-panel .App-menu__left,
+.excalidraw.hide-left-panel .excalidraw-hyperlinkContainer,
+.excalidraw__embeddable-container:has(video) .excalidraw__embeddable-hint {
   display: none !important;
 }
 
@@ -177,4 +179,16 @@
   filter: none !important;
   color: #f5f5f5 !important;
   background-color: #333333 !important;
+}
+
+/* 项目卡片布局隔离，避免多项目网格交互重排扩散到全局 */
+.jaaz-card-contain {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px auto 240px;
+}
+
+@supports not (content-visibility: auto) {
+  .jaaz-card-contain {
+    contain: layout style paint;
+  }
 }

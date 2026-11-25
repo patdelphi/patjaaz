@@ -69,6 +69,7 @@ async def save_video_to_canvas(
             {
                 "width": width,
                 "height": height,
+                "url": file_url,
             },
         )
 
@@ -270,7 +271,7 @@ async def generate_new_video_element(
         "boundElements": None,
         "roundness": None,
         "frameId": None,
-        "backgroundColor": "transparent",
+        "backgroundColor": "#09090b",
         "strokeWidth": 1,
         "roughness": 0,
         "opacity": 100,
@@ -281,7 +282,7 @@ async def generate_new_video_element(
         "isDeleted": False,
         "index": None,
         "updated": 0,
-        "link": None,
+        "link": video_data.get("url"),
         "locked": False,
         "status": "saved",
         "scale": [1, 1],

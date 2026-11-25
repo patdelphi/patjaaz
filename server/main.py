@@ -237,18 +237,43 @@ class NoCacheStaticFiles(StaticFiles):
         return response
 
 
-static_site = os.path.join(react_build_dir, "assets")
-if os.path.exists(static_site):
-    app.mount("/assets", NoCacheStaticFiles(directory=static_site), name="assets")
-
-
-@app.get("/")
-async def serve_react_app():
+def _serve_spa_index() -> Response:
+    """返回前端单页应用入口 index.html 并附带禁缓存头，支持直接访问或刷新前端子路由。"""
     response = FileResponse(os.path.join(react_build_dir, "index.html"))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.get("/")
+async def serve_react_app():
+    return _serve_spa_index()
+
+
+@app.get("/canvas/{canvas_id}")
+async def serve_react_canvas_route(canvas_id: str):
+    return _serve_spa_index()
+
+
+@app.get("/assets")
+async def serve_react_assets_route():
+    return _serve_spa_index()
+
+
+@app.get("/unicorn.png")
+async def serve_unicorn_logo():
+    return FileResponse(os.path.join(react_build_dir, "unicorn.png"))
+
+
+@app.get("/jaaz.png")
+async def serve_jaaz_logo():
+    return FileResponse(os.path.join(react_build_dir, "jaaz.png"))
+
+
+static_site = os.path.join(react_build_dir, "assets")
+if os.path.exists(static_site):
+    app.mount("/assets", NoCacheStaticFiles(directory=static_site), name="assets")
 
 
 print('Creating socketio app')

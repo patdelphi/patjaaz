@@ -1,5 +1,7 @@
+/** 程序说明：画布内嵌视频播放组件，支持画面区直接拖拽选中及底部控制栏播放、有声/静音切换、进度拖拽与下载。 */
 import React, { useState, useRef, useEffect } from 'react'
-import { VideoPlayer, VideoPreview } from '@/components/ui/video-player'
+import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { VideoPreview } from '@/components/ui/video-player'
 import { cn } from '@/lib/utils'
 
 interface VideoElementProps {
@@ -18,13 +20,21 @@ interface VideoElementProps {
     onEnded?: () => void
 }
 
+function formatSeconds(sec: number): string {
+    if (!Number.isFinite(sec) || sec < 0) return '0:00'
+    const total = Math.floor(sec)
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    return `${m}:${String(s).padStart(2, '0')}`
+}
+
 export const VideoElement: React.FC<VideoElementProps> = ({
     src,
     poster,
     duration,
     autoPlay = false,
-    loop = false,
-    muted = true, // Default muted for canvas elements
+    loop = true,
+    muted = true,
     className,
     width = 320,
     height = 180,
@@ -34,12 +44,13 @@ export const VideoElement: React.FC<VideoElementProps> = ({
     onEnded,
 }) => {
     const [isPlaying, setIsPlaying] = useState(false)
-    const [showFullPlayer, setShowFullPlayer] = useState(false)
-    const [isPaused, setIsPaused] = useState(false) // 跟踪是否被用户暂停
-    const [isHovered, setIsHovered] = useState(false) // 跟踪鼠标悬停状态
+    const [isMuted, setIsMuted] = useState(muted)
+    const [userStarted, setUserStarted] = useState(false)
+    const [isHovered, setIsHovered] = useState(false)
+    const [currentTime, setCurrentTime] = useState(0)
+    const [totalDuration, setTotalDuration] = useState<number>(duration || 0)
     const videoRef = useRef<HTMLVideoElement>(null)
 
-    // For canvas preview mode
     if (isPreview) {
         return (
             <VideoPreview
@@ -50,128 +61,193 @@ export const VideoElement: React.FC<VideoElementProps> = ({
                 height={height}
                 onClick={() => {
                     onClick?.()
-                    setShowFullPlayer(true)
                 }}
             />
         )
     }
 
-    // 处理鼠标悬停事件
+    const prefersReducedMotion = () =>
+        typeof window !== 'undefined' &&
+        Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+
     const handleMouseEnter = () => {
         setIsHovered(true)
         const video = videoRef.current
-        if (video && !isPaused) {
-            video.play()
-            setIsPlaying(true)
+        if (video && !userStarted && !isPlaying && !prefersReducedMotion()) {
+            void video.play().then(() => setIsPlaying(true)).catch(() => {})
         }
     }
 
-    // 处理鼠标移出事件
     const handleMouseLeave = () => {
         setIsHovered(false)
         const video = videoRef.current
-        if (video && !isPaused) {
+        // 用户主动播放或开启声音后，移出鼠标不打断播放、也不重置进度
+        if (video && !userStarted && isMuted && isPlaying) {
             video.pause()
-            video.currentTime = 0 // 重置到开始
             setIsPlaying(false)
         }
     }
 
-    // 处理点击事件
-    const handleClick = () => {
+    const togglePlay = (e: React.MouseEvent) => {
+        e.stopPropagation()
         const video = videoRef.current
         if (!video) return
-
         if (isPlaying) {
             video.pause()
             setIsPlaying(false)
-            setIsPaused(true)
+            setUserStarted(false)
         } else {
-            video.play()
-            setIsPlaying(true)
-            setIsPaused(false)
+            setUserStarted(true)
+            void video.play().then(() => setIsPlaying(true)).catch(() => {})
         }
         onClick?.()
     }
 
-    // 监听视频结束事件
+    const toggleMute = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        const video = videoRef.current
+        if (!video) return
+        const nextMuted = !isMuted
+        video.muted = nextMuted
+        setIsMuted(nextMuted)
+        if (!nextMuted && !isPlaying) {
+            setUserStarted(true)
+            void video.play().then(() => setIsPlaying(true)).catch(() => {})
+        }
+    }
+
+    const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.stopPropagation()
+        const nextTime = Number(e.target.value)
+        const video = videoRef.current
+        if (video && Number.isFinite(nextTime)) {
+            video.currentTime = nextTime
+            setCurrentTime(nextTime)
+        }
+    }
+
     useEffect(() => {
         const video = videoRef.current
         if (!video) return
 
+        const handleLoadedMetadata = () => {
+            if (Number.isFinite(video.duration) && video.duration > 0) {
+                setTotalDuration(video.duration)
+            }
+        }
         const handleEnded = () => {
-            setIsPlaying(false)
-            setIsPaused(false)
-            // 如果鼠标还在悬停，重新播放
-            if (isHovered) {
-                video.currentTime = 0
-                video.play()
-                setIsPlaying(true)
+            if (!loop) {
+                setIsPlaying(false)
+                setUserStarted(false)
             }
             onEnded?.()
         }
-
         const handleTimeUpdate = () => {
-            if (onTimeUpdate && video.duration) {
-                onTimeUpdate(video.currentTime, video.duration)
+            setCurrentTime(video.currentTime)
+            if (Number.isFinite(video.duration) && video.duration > 0) {
+                setTotalDuration(video.duration)
+                onTimeUpdate?.(video.currentTime, video.duration)
             }
         }
 
+        video.addEventListener('loadedmetadata', handleLoadedMetadata)
         video.addEventListener('ended', handleEnded)
         video.addEventListener('timeupdate', handleTimeUpdate)
-
         return () => {
+            video.removeEventListener('loadedmetadata', handleLoadedMetadata)
             video.removeEventListener('ended', handleEnded)
             video.removeEventListener('timeupdate', handleTimeUpdate)
         }
-    }, [isHovered, onEnded, onTimeUpdate])
+    }, [loop, onEnded, onTimeUpdate])
 
-    // Full video player
+    const intWidth = Math.max(1, Math.round(width))
+    const intHeight = Math.max(1, Math.round(height))
+
+    // 主体不拦截 pointerDown，确保在视频画面内可直接按住拖拽移动或选中画布元素；底部控制栏独立响应播放与音量控制
     return (
         <div
-            className={cn('relative cursor-pointer', className)}
+            className={cn('group relative select-none overflow-hidden rounded-md', className)}
+            style={{ width: intWidth, height: intHeight }}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            onClick={handleClick}
-            onPointerDown={(e) => e.stopPropagation()} // Prevent Excalidraw from taking over
         >
             <video
                 ref={videoRef}
                 src={src}
                 poster={poster}
+                width={intWidth}
+                height={intHeight}
+                autoPlay={autoPlay && !prefersReducedMotion()}
                 loop={loop}
-                muted={muted}
-                className="w-full h-full object-cover"
-                style={{ width, height, pointerEvents: 'none' }}
+                muted={isMuted}
+                preload="metadata"
+                {...({ loading: 'lazy' } as Record<string, unknown>)}
+                className="w-full h-full object-cover pointer-events-none"
                 playsInline
             />
 
-            {/* 暂停按钮覆盖层 */}
-            {isPaused && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                    <div className="bg-black/60 rounded-full p-3 flex items-center justify-center">
-                        <svg 
-                            width="24" 
-                            height="24" 
-                            viewBox="0 0 24 24" 
-                            fill="none" 
-                            className="text-white"
-                        >
-                            <polygon 
-                                points="9,6 9,18 21,12" 
-                                fill="currentColor"
-                            />
-                        </svg>
-                    </div>
-                </div>
-            )}
+            <div
+                className={cn(
+                    'pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex items-center gap-2 bg-gradient-to-t from-black/80 via-black/45 to-transparent px-2.5 py-2 text-white transition-opacity duration-150',
+                    isHovered || !isPlaying || !isMuted ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                )}
+                style={{ pointerEvents: 'auto' }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button
+                    type="button"
+                    aria-label={isPlaying ? 'Pause video' : 'Play video'}
+                    onClick={togglePlay}
+                    className="flex min-h-7 min-w-7 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                    {isPlaying ? (
+                        <Pause className="size-3.5" aria-hidden="true" />
+                    ) : (
+                        <Play className="size-3.5" aria-hidden="true" />
+                    )}
+                </button>
 
-            {/* Video info overlay */}
-            {duration && (
-                <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                    {duration}s
-                </div>
-            )}
+                <button
+                    type="button"
+                    aria-label="Mute video audio"
+                    aria-pressed={isMuted}
+                    onClick={toggleMute}
+                    className="flex min-h-7 min-w-7 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                    {isMuted ? (
+                        <VolumeX className="size-3.5" aria-hidden="true" />
+                    ) : (
+                        <Volume2 className="size-3.5" aria-hidden="true" />
+                    )}
+                </button>
+
+                <input
+                    type="range"
+                    aria-label="Video timeline"
+                    min={0}
+                    max={totalDuration > 0 ? totalDuration : 1}
+                    step={0.05}
+                    value={Math.min(currentTime, totalDuration > 0 ? totalDuration : 1)}
+                    onChange={handleScrub}
+                    className="h-1.5 flex-1 cursor-pointer accent-white"
+                />
+
+                <span className="text-[11px] tabular-nums opacity-90">
+                    {formatSeconds(currentTime)} / {formatSeconds(totalDuration)}
+                </span>
+
+                <a
+                    href={src}
+                    download
+                    aria-label="Download video"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex min-h-7 min-w-7 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                    <Download className="size-3.5" aria-hidden="true" />
+                </a>
+            </div>
         </div>
     )
 }

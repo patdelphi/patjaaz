@@ -404,7 +404,7 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
                         new_element = await generate_new_video_element(
                             canvas_id,
                             file_id,
-                            {"width": width, "height": height},
+                            {"width": width, "height": height, "url": url},
                             canvas_data=canvas_data.get("data", {}),
                         )
 
@@ -468,18 +468,21 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
             for file_info in generated_files_info:
                 if file_info["mime_type"].startswith("audio"):
                     links.append(f"[{file_info['filename']}]({file_info['url']})")
+                elif file_info["mime_type"].startswith("video"):
+                    links.append(f"![video_id: {file_info['filename']}]({file_info['url']})")
                 else:
                     links.append(f"![id: {file_info['filename']}]({file_info['url']})")
             return f"workflow executed successfully {', '.join(links)}"
 
         except Exception as e:
-            print(f"Error generating image: {str(e)}")
+            err_detail = str(e).strip() or f"{type(e).__name__}"
+            print(f"Error generating image: {err_detail}")
             traceback.print_exc()
             try:
                 await db_service.update_job_status(
                     job_id,
                     status="failed",
-                    error=str(e),
+                    error=err_detail,
                     finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 )
             except Exception:

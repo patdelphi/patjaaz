@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { useCanvas } from '@/contexts/canvas'
+import { findCanvasElementByMediaUrl } from '@/lib/canvasMediaNormalize'
 import { memo, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown, { Components } from 'react-markdown'
@@ -13,11 +14,6 @@ type MarkdownProps = {
 
 const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
   const { excalidrawAPI } = useCanvas()
-  const files = excalidrawAPI?.getFiles()
-  const filesArray = Object.keys(files || {}).map((key) => ({
-    id: key,
-    url: files![key].dataURL,
-  }))
 
   const { t } = useTranslation()
   const [isThinkExpanded, setIsThinkExpanded] = useState(false)
@@ -81,8 +77,22 @@ const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
     setIsThinkExpanded(hasUnclosed)
   }, [hasUnclosed])
 
-  const handleImagePositioning = (id: string) => {
-    excalidrawAPI?.scrollToContent(id, { animate: true })
+  const resolveMatchedElement = (srcUrl?: string) => {
+    if (!excalidrawAPI || !srcUrl) return null
+    return findCanvasElementByMediaUrl(
+      excalidrawAPI.getSceneElements(),
+      excalidrawAPI.getFiles(),
+      srcUrl
+    )
+  }
+
+  const handleMediaPositioning = (srcUrl?: string) => {
+    const matched = resolveMatchedElement(srcUrl)
+    if (!excalidrawAPI || !matched) return
+    excalidrawAPI.scrollToContent(matched, { animate: true })
+    excalidrawAPI.updateScene({
+      appState: { selectedElementIds: { [matched.id]: true } },
+    })
   }
 
   const components: Components = {
@@ -208,7 +218,7 @@ const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
       )
     },
     img: ({ node, children, ...props }) => {
-      const id = filesArray.find((file) => props.src?.includes(file.url))?.id
+      const matched = resolveMatchedElement(props.src)
 
       // 检查alt文本是否包含video_id标识，这表示这是一个视频文件
       const isVideo = props.alt && props.alt.includes('video_id:')
@@ -217,22 +227,25 @@ const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
         return (
           <span className="group block relative overflow-hidden rounded-md my-2 last:mb-4">
             <video
-              className="w-full max-w-full h-auto rounded-md cursor-pointer group-hover:scale-105 transition-transform duration-300"
+              className="w-full max-w-full h-auto rounded-md cursor-pointer"
               controls
+              width={640}
+              height={360}
               preload="metadata"
+              {...({ loading: 'lazy' } as Record<string, unknown>)}
               src={props.src}
               {...(props.alt && { title: props.alt })}
             >
               Your browser does not support the video tag.
             </video>
 
-            {id && (
+            {matched && (
               <Button
                 variant="secondary"
                 className="group-hover:opacity-100 opacity-0 absolute top-2 right-2 z-10"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleImagePositioning(id)
+                  handleMediaPositioning(props.src)
                 }}
               >
                 {t('chat:messages:imagePositioning')}
@@ -247,16 +260,17 @@ const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
           <span className="group block relative overflow-hidden rounded-md my-2 last:mb-4">
             <img
               className="cursor-pointer group-hover:scale-105 transition-transform duration-300"
+              alt={props.alt || 'Generated artwork'}
               {...props}
             />
 
-            {id && (
+            {matched && (
               <Button
                 variant="secondary"
                 className="group-hover:opacity-100 opacity-0 absolute top-2 right-2 z-10"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleImagePositioning(id)
+                  handleMediaPositioning(props.src)
                 }}
               >
                 {t('chat:messages:imagePositioning')}
@@ -267,25 +281,28 @@ const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children }) => {
       )
     },
     video: ({ node, children, ...props }) => {
-      const id = filesArray.find((file) => props.src?.includes(file.url))?.id
+      const matched = resolveMatchedElement(props.src)
       return (
         <span className="group block relative overflow-hidden rounded-md my-2 last:mb-4">
           <video
             className="w-full max-w-full h-auto rounded-md"
             controls
+            width={640}
+            height={360}
             preload="metadata"
+            {...({ loading: 'lazy' } as Record<string, unknown>)}
             {...props}
           >
             Your browser does not support the video tag.
           </video>
 
-          {id && (
+          {matched && (
             <Button
               variant="secondary"
               className="group-hover:opacity-100 opacity-0 absolute top-2 right-2 z-10"
               onClick={(e) => {
                 e.stopPropagation()
-                handleImagePositioning(id)
+                handleMediaPositioning(props.src)
               }}
             >
               {t('chat:messages:imagePositioning')}

@@ -1,6 +1,12 @@
 import { getCanvas, saveCanvas } from '@/api/canvas'
 import { recomputeResizedBlockArrows } from '@/lib/blockArrow'
 import { findNewPersistableImageIds, getPersistableImageIds } from '@/lib/canvasImagePersistence'
+import {
+  computeSceneVersionKey,
+  isVideoUrl,
+  normalizeCanvasElementsForScene,
+  pickCanvasThumbnailUrl,
+} from '@/lib/canvasMediaNormalize'
 import { queueCanvasSave } from '@/lib/canvasSaveQueue'
 import { isAllowedEmbeddableUrl } from '@/lib/embeddableUrl'
 import { CAPTURE_UPDATE_IMMEDIATELY } from '@/lib/excalidrawMutation'
@@ -50,33 +56,42 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
   initialData,
 }) => {
   const { excalidrawAPI, setExcalidrawAPI } = useCanvas()
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const saveErrorShownRef = useRef(false)
+  const hadElementsRef = useRef<boolean>((initialData?.elements?.length ?? 0) > 0)
+  const lastSelectionKeyRef = useRef<string>('')
+  const lastSceneVersionKeyRef = useRef<string>(
+    computeSceneVersionKey(
+      (initialData?.elements ?? []) as ReadonlyArray<OrderedExcalidrawElement>
+    )
+  )
 
   const { i18n, t } = useTranslation()
 
-  // Immediate handler for UI updates (no debounce)
+  // 仅在选中集合变化时更新左侧属性面板显隐，避免平移/缩放每帧查询 DOM
   const handleSelectionChange = (
     elements: Readonly<OrderedExcalidrawElement[]>,
     appState: AppState
   ) => {
     if (!appState) return
+    const selectionKey = Object.keys(appState.selectedElementIds || {})
+      .filter((k) => appState.selectedElementIds[k])
+      .sort()
+      .join(',')
+    if (selectionKey === lastSelectionKeyRef.current) return
+    lastSelectionKeyRef.current = selectionKey
 
-    // Check if any selected element is embeddable type
-    const selectedElements = elements.filter((element) => 
-      appState.selectedElementIds[element.id]
-    )
-    const hasEmbeddableSelected = selectedElements.some(
-      (element) => element.type === 'embeddable'
-    )
+    const hasEmbeddableSelected =
+      selectionKey.length > 0 &&
+      elements.some(
+        (element) =>
+          appState.selectedElementIds[element.id] && element.type === 'embeddable'
+      )
 
-    // Toggle CSS class to hide/show left panel immediately
-    const excalidrawContainer = document.querySelector('.excalidraw')
+    const excalidrawContainer =
+      wrapperRef.current?.querySelector('.excalidraw') ?? null
     if (excalidrawContainer) {
-      if (hasEmbeddableSelected) {
-        excalidrawContainer.classList.add('hide-left-panel')
-      } else {
-        excalidrawContainer.classList.remove('hide-left-panel')
-      }
+      excalidrawContainer.classList.toggle('hide-left-panel', hasEmbeddableSelected)
     }
   }
 
@@ -86,7 +101,13 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       appState: AppState,
       files: BinaryFiles
     ) => {
-      if (elements.length === 0 || !appState) return
+      if (!appState) return
+      if (elements.length > 0) {
+        hadElementsRef.current = true
+      } else if (!hadElementsRef.current) {
+        // 首次挂载且原本为空时不发多余写请求；若用户将已有元素清空则正常落库
+        return
+      }
 
       const data: CanvasData = {
         elements,
@@ -97,14 +118,7 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         files,
       }
 
-      let thumbnail = ''
-      const latestImage = elements
-        .filter((element) => element.type === 'image')
-        .sort((a, b) => b.updated - a.updated)[0]
-      if (latestImage?.type === 'image') {
-        const file = latestImage.fileId ? files[latestImage.fileId] : undefined
-        if (file?.dataURL) thumbnail = file.dataURL
-      }
+      const thumbnail = pickCanvasThumbnailUrl(elements, files)
 
       try {
         await queueCanvasSave(canvasId, () =>
@@ -154,8 +168,13 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
     appState: AppState,
     files: BinaryFiles
   ) => {
-    // Immediate UI updates
     handleSelectionChange(elements, appState)
+
+    // 纯平移/缩放视野时元素版本指纹不变，直接跳过重算与保存以保证 60fps 流畅度
+    const nextVersionKey = computeSceneVersionKey(elements)
+    if (nextVersionKey === lastSceneVersionKeyRef.current) {
+      return
+    }
 
     // 块箭头被缩放结束后按参数重算闭合多边形顶点（非拉伸中执行避免高频重绘抖动）
     if (excalidrawAPI && !appState.resizingElement) {
@@ -167,6 +186,11 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         })
         return
       }
+    }
+
+    lastSceneVersionKeyRef.current = nextVersionKey
+    if (elements.length > 0) {
+      hadElementsRef.current = true
     }
 
     const newImageIds = findNewPersistableImageIds(
@@ -219,27 +243,33 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
     }
   }, [excalidrawAPI, theme])
 
+  const focusElementIfUserIdle = useCallback(
+    (target: OrderedExcalidrawElement) => {
+      if (!excalidrawAPI) return
+      const st = excalidrawAPI.getAppState()
+      if (
+        st.cursorButton === 'down' ||
+        st.resizingElement ||
+        st.editingTextElement ||
+        st.selectionElement
+      ) {
+        return
+      }
+      excalidrawAPI.scrollToContent(target, { animate: true })
+    },
+    [excalidrawAPI]
+  )
+
   const addImageToExcalidraw = useCallback(
     async (imageElement: ExcalidrawImageElement, file: BinaryFileData) => {
       if (!excalidrawAPI) return
 
-      // 获取当前画布元素以便添加新元素
       const currentElements = excalidrawAPI.getSceneElements()
+      if (currentElements.some((el) => el.id === imageElement.id && !el.isDeleted)) {
+        return
+      }
 
       excalidrawAPI.addFiles([file])
-
-      console.log('👇 Adding new image element to canvas:', imageElement.id)
-      console.log('👇 Image element properties:', {
-        id: imageElement.id,
-        type: imageElement.type,
-        locked: imageElement.locked,
-        groupIds: imageElement.groupIds,
-        isDeleted: imageElement.isDeleted,
-        x: imageElement.x,
-        y: imageElement.y,
-        width: imageElement.width,
-        height: imageElement.height,
-      })
 
       // Ensure image is not locked and can be manipulated
       const unlockedImageElement = {
@@ -252,91 +282,74 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
       excalidrawAPI.updateScene({
         elements: [...(currentElements || []), unlockedImageElement],
       })
+      focusElementIfUserIdle(unlockedImageElement as OrderedExcalidrawElement)
 
       localStorage.setItem(
         'excalidraw-last-image-position',
         JSON.stringify(lastImagePosition.current)
       )
     },
-    [excalidrawAPI]
+    [excalidrawAPI, focusElementIfUserIdle]
   )
 
   const addVideoEmbed = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (elementData: any, videoSrc: string) => {
       if (!excalidrawAPI) return
+      const existing = excalidrawAPI.getSceneElements()
+      if (existing.some((el) => el.id === elementData.id && !el.isDeleted)) {
+        return
+      }
 
       // Function to create video element with given dimensions
       const createVideoElement = (finalWidth: number, finalHeight: number) => {
-        console.log('👇 Video element properties:', {
-          id: elementData.id,
-          type: elementData.type,
-          locked: elementData.locked,
-          groupIds: elementData.groupIds,
-          isDeleted: elementData.isDeleted,
-          x: elementData.x,
-          y: elementData.y,
-          width: elementData.width,
-          height: elementData.height,
-        })
-
         const videoElements = convertToExcalidrawElements([
           {
             type: 'embeddable',
             id: elementData.id,
             x: elementData.x,
             y: elementData.y,
-            width: elementData.width,
-            height: elementData.height,
+            width: finalWidth,
+            height: finalHeight,
             link: videoSrc,
-            // 添加必需的基本样式属性
             strokeColor: '#000000',
-            backgroundColor: 'transparent',
+            backgroundColor: '#09090b',
             fillStyle: 'solid',
             strokeWidth: 1,
             strokeStyle: 'solid',
             roundness: null,
             roughness: 1,
             opacity: 100,
-            // 添加必需的变换属性
             angle: 0,
-            seed: Math.random(),
+            seed: Math.floor(Math.random() * 1_000_000),
             version: 1,
-            versionNonce: Math.random(),
-            // 添加必需的状态属性
+            versionNonce: Math.floor(Math.random() * 1_000_000),
             locked: false,
             isDeleted: false,
             groupIds: [],
-            // 添加绑定框属性
             boundElements: [],
             updated: Date.now(),
-            // 添加必需的索引和帧ID属性
             frameId: null,
-            index: null, // 添加缺失的index属性
-            // 添加自定义数据属性
-            customData: {},
+            index: null,
+            customData: {
+              jaazMediaType: 'video',
+              fileId: elementData.fileId || elementData.id,
+            },
           },
         ])
 
-        console.log('👇 Converted video elements:', videoElements)
-
         const currentElements = excalidrawAPI.getSceneElements()
+        if (currentElements.some((el) => el.id === elementData.id && !el.isDeleted)) {
+          return
+        }
         const newElements = [...currentElements, ...videoElements]
-
-        console.log(
-          '👇 Updating scene with elements count:',
-          newElements.length
-        )
 
         excalidrawAPI.updateScene({
           elements: newElements,
         })
-
-        console.log(
-          '👇 Added video embed element:',
-          videoSrc,
-          `${elementData.width}x${elementData.height}`
-        )
+        if (videoElements[0]) {
+          focusElementIfUserIdle(videoElements[0] as OrderedExcalidrawElement)
+        }
       }
 
       // If dimensions are provided, use them directly
@@ -444,26 +457,34 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         const existingIds = new Set(
           excalidrawAPI.getSceneElements().map((element) => element.id)
         )
-        const missingImages = savedCanvas.data.elements.filter(
-          (element) =>
-            element.type === 'image' &&
-            !element.isDeleted &&
-            !existingIds.has(element.id)
-        ) as ExcalidrawImageElement[]
+        const savedElements = savedCanvas.data.elements || []
+        const savedFiles = savedCanvas.data.files || {}
 
-        for (const image of missingImages) {
-          // 已保存的画布图像可能没有关联文件，跳过无法恢复的元素。
-          if (!image.fileId) continue
-          const file = savedCanvas.data.files[image.fileId]
-          if (file) {
-            await addImageToExcalidraw(image, file)
+        for (const element of savedElements) {
+          if (element.isDeleted || existingIds.has(element.id)) continue
+          if (element.type === 'image') {
+            const img = element as ExcalidrawImageElement
+            if (!img.fileId) continue
+            const file = savedFiles[img.fileId]
+            if (file) {
+              await addImageToExcalidraw(img, file)
+            }
+          } else {
+            const anyEl = element as unknown as Record<string, unknown>
+            const elType = String(anyEl.type || '')
+            const rawLink = typeof anyEl.link === 'string' ? anyEl.link : ''
+            const fid = typeof anyEl.fileId === 'string' ? anyEl.fileId : element.id
+            const videoUrl = rawLink || savedFiles[fid]?.dataURL || ''
+            if ((elType === 'video' || (elType === 'embeddable' && isVideoUrl(videoUrl))) && videoUrl) {
+              await addVideoEmbed(anyEl, videoUrl)
+            }
           }
         }
       } catch (error) {
-        console.error('Could not sync generated canvas images', error)
+        console.error('Could not sync generated canvas media', error)
       }
     },
-    [addImageToExcalidraw, canvasId, excalidrawAPI]
+    [addImageToExcalidraw, addVideoEmbed, canvasId, excalidrawAPI]
   )
 
   const handleVideoGenerated = useCallback(
@@ -494,7 +515,11 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
   }, [handleImageGenerated, handleSyncGeneratedImages, handleVideoGenerated])
 
   return (
-    <div className={excalidrawClassName} style={{ width: '100%', height: '100%' }}>
+    <div
+      ref={wrapperRef}
+      className={excalidrawClassName}
+      style={{ width: '100%', height: '100%' }}
+    >
       <Excalidraw
         theme={customTheme as Theme}
         langCode={i18n.language}
@@ -503,15 +528,21 @@ const CanvasExcali: React.FC<CanvasExcaliProps> = ({
         }}
         onChange={handleChange}
         initialData={() => {
-          const data = initialData
-          console.log('👇initialData', data)
-          if (data?.appState) {
-            data.appState = {
-              ...data.appState,
-              collaborators: undefined!,
-            }
+          if (!initialData) return null
+          const normalizedElements = normalizeCanvasElementsForScene(
+            initialData.elements as unknown as ReadonlyArray<{ id: string; [key: string]: unknown }>,
+            initialData.files
+          ) as unknown as ExcalidrawInitialDataState['elements']
+          return {
+            ...initialData,
+            elements: normalizedElements,
+            appState: initialData.appState
+              ? {
+                  ...initialData.appState,
+                  collaborators: undefined!,
+                }
+              : initialData.appState,
           }
-          return data || null
         }}
         renderEmbeddable={renderEmbeddable}
         // 仅允许同源 /api/file/ 资源作为画布内嵌媒体，禁止任意外部网页。

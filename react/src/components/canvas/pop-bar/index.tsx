@@ -2,10 +2,7 @@
 import { useCanvas } from '@/contexts/canvas'
 import { useExcalidrawChange } from '@/hooks/use-excalidraw-change'
 import { isBlockArrowElement } from '@/lib/blockArrow'
-import {
-  extractSelectedCanvasTexts,
-  normalizeCanvasImageForChat,
-} from '@/lib/canvasChatImage'
+import { collectSelectedCanvasContextForChat } from '@/lib/canvasMediaNormalize'
 import { TCanvasAddImagesToChatEvent } from '@/lib/event'
 import {
   ExcalidrawElement,
@@ -68,24 +65,24 @@ const CanvasPopbarWrapper = () => {
     setShowStrokeWidth(hasStroke)
     setShowBlockArrow(hasBlockArrow)
 
+    // 汇总选中图片、独立/绑定文字、画布视频及选中 Frame 分镜框内的全部素材供一键加入对话
+    const chatContext = collectSelectedCanvasContextForChat(
+      elements,
+      files,
+      selectedIds
+    )
+    selectedImagesRef.current = chatContext.images
+    selectedTextsRef.current = chatContext.texts
+
+    const canAddToChat =
+      selectedImagesRef.current.length > 0 || selectedTextsRef.current.length > 0
+    setShowAddToChat(canAddToChat)
+
     const hasSelectedImages = selectedImages.length > 0
-    if (!hasSelectedImages && !hasText && !hasStroke && !hasBlockArrow) {
+    if (!canAddToChat && !hasSelectedImages && !hasText && !hasStroke && !hasBlockArrow) {
       setPos(null)
       return
     }
-
-    selectedImagesRef.current = selectedImages.flatMap((image) => {
-      const file = image.fileId ? files[image.fileId] : undefined
-      const attachment = normalizeCanvasImageForChat(image, file)
-      return attachment ? [attachment] : []
-    })
-
-    // 提取选中的文字框及选中图形内部绑定的文字，按阅读顺序排列供一键加入对话脚本
-    selectedTextsRef.current = extractSelectedCanvasTexts(elements, selectedIds)
-
-    setShowAddToChat(
-      selectedImagesRef.current.length > 0 || selectedTextsRef.current.length > 0
-    )
 
     let centerX: number
     let bottomY: number
