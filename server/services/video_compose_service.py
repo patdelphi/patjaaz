@@ -15,6 +15,11 @@ from pymediainfo import MediaInfo
 
 from services.config_service import FILES_DIR
 from services.db_service import db_service
+from services.video_finishing_service import (
+    build_post_concat_finishing_filters,
+    build_srt_content,
+    format_srt_timestamp,
+)
 from services.websocket_service import broadcast_session_update
 from tools.utils.image_canvas_utils import generate_file_id
 from tools.video_generation.video_canvas_utils import generate_new_video_element
@@ -211,35 +216,6 @@ def probe_video_clip_info(file_path: str, ffmpeg_bin: Optional[str] = None) -> D
     return info
 
 
-def format_srt_timestamp(seconds: float) -> str:
-    """将浮点秒数格式化为标准 SRT 时间轴字符串 HH:MM:SS,mmm。"""
-    clamped = max(0.0, float(seconds))
-    total_ms = int(round(clamped * 1000))
-    hours, rem = divmod(total_ms, 3_600_000)
-    minutes, rem = divmod(rem, 60_000)
-    secs, ms = divmod(rem, 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
-
-
-def build_srt_content(subtitles: List[Dict[str, Any]]) -> str:
-    """将字幕条目列表（start, end, text）序列化为 UTF-8 SRT 文本。"""
-    blocks: List[str] = []
-    idx = 1
-    for item in subtitles or []:
-        if not isinstance(item, dict):
-            continue
-        txt = str(item.get("text") or "").strip()
-        if not txt:
-            continue
-        start_s = float(item.get("start") or 0.0)
-        end_s = max(start_s + 0.5, float(item.get("end") or (start_s + 3.0)))
-        blocks.append(
-            f"{idx}\n{format_srt_timestamp(start_s)} --> {format_srt_timestamp(end_s)}\n{txt}\n"
-        )
-        idx += 1
-    return "\n".join(blocks)
-
-
 def build_ffmpeg_compose_command(
     ffmpeg_bin: str,
     clip_paths: List[str],
@@ -253,8 +229,12 @@ def build_ffmpeg_compose_command(
     clip_specs: Optional[List[Dict[str, Any]]] = None,
     preserve_clip_audio: bool = False,
     transition_fade_sec: float = 0.0,
+    normalize_audio_loudness: bool = False,
+    burn_subtitles: bool = False,
+    intro_title: Optional[str] = None,
+    fade_out_outro_sec: float = 0.0,
 ) -> List[str]:
-    """构建安全的参数数组形式 ffmpeg 自动裁剪与拼接命令，支持保留多段原生立体声音轨、静音兜底、转场淡入淡出及旁白混音。"""
+    """构建安全的参数数组形式 ffmpeg 自动裁剪与拼接命令，支持立体声音轨、响度均衡、硬烧录字幕与片头片尾精装。"""
     if not clip_paths:
         raise ValueError("clip_paths cannot be empty")
 
@@ -273,7 +253,7 @@ def build_ffmpeg_compose_command(
         cmd.extend(["-i", narration_path])
 
     srt_idx: Optional[int] = None
-    if srt_path:
+    if srt_path and not burn_subtitles:
         srt_idx = len(clip_paths) + (1 if narration_path else 0)
         cmd.extend(["-i", srt_path])
 
@@ -284,43 +264,44 @@ def build_ffmpeg_compose_command(
 
     filter_parts: List[str] = []
     use_audio_concat = bool(preserve_clip_audio and clip_specs and len(clip_specs) == len(clip_paths))
+    total_eff_dur = 0.0
 
     for i in range(len(clip_paths)):
         spec = clip_specs[i] if (clip_specs and i < len(clip_specs)) else {}
-        t_start = spec.get("trim_start")
-        t_end = spec.get("trim_end")
+        t_start, t_end = spec.get("trim_start"), spec.get("trim_end")
         raw_dur = float(spec.get("duration") or 0.0)
 
         s_val = max(0.0, float(t_start)) if t_start is not None else 0.0
         e_val = float(t_end) if (t_end is not None and float(t_end) > s_val) else None
         eff_dur = (e_val - s_val) if e_val is not None else max(0.0, raw_dur - s_val)
+        total_eff_dur += eff_dur if eff_dur > 0 else 5.0
 
         v_chain: List[str] = []
         if s_val > 0.0 or e_val is not None:
-            if e_val is not None:
-                v_chain.append(f"trim=start={s_val:.3f}:end={e_val:.3f},setpts=PTS-STARTPTS")
-            else:
-                v_chain.append(f"trim=start={s_val:.3f},setpts=PTS-STARTPTS")
+            v_chain.append(
+                f"trim=start={s_val:.3f}:end={e_val:.3f},setpts=PTS-STARTPTS"
+                if e_val is not None
+                else f"trim=start={s_val:.3f},setpts=PTS-STARTPTS"
+            )
         v_chain.append(scale_pad)
 
         if fade_d > 0.0 and eff_dur > fade_d * 2.5:
             if i > 0:
                 v_chain.append(f"fade=t=in:st=0:d={fade_d:.3f}")
             if i < len(clip_paths) - 1:
-                out_st = max(0.0, eff_dur - fade_d)
-                v_chain.append(f"fade=t=out:st={out_st:.3f}:d={fade_d:.3f}")
+                v_chain.append(f"fade=t=out:st={max(0.0, eff_dur - fade_d):.3f}:d={fade_d:.3f}")
 
         filter_parts.append(f"[{i}:v]{','.join(v_chain)}[v{i}]")
 
         if use_audio_concat:
-            has_aud = bool(spec.get("has_audio", False))
-            if has_aud:
+            if bool(spec.get("has_audio", False)):
                 a_chain: List[str] = []
                 if s_val > 0.0 or e_val is not None:
-                    if e_val is not None:
-                        a_chain.append(f"atrim=start={s_val:.3f}:end={e_val:.3f},asetpts=PTS-STARTPTS")
-                    else:
-                        a_chain.append(f"atrim=start={s_val:.3f},asetpts=PTS-STARTPTS")
+                    a_chain.append(
+                        f"atrim=start={s_val:.3f}:end={e_val:.3f},asetpts=PTS-STARTPTS"
+                        if e_val is not None
+                        else f"atrim=start={s_val:.3f},asetpts=PTS-STARTPTS"
+                    )
                 a_chain.append("aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo")
                 if fade_d > 0.0 and eff_dur > fade_d * 2.5:
                     af_d = min(fade_d, 0.25)
@@ -345,11 +326,31 @@ def build_ffmpeg_compose_command(
             )
         else:
             filter_parts.append(f"{va_inputs}concat=n={len(clip_paths)}:v=1:a=1[vout][aout]")
-        cmd.extend(["-filter_complex", ";".join(filter_parts), "-map", "[vout]", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k"])
+        extra_clauses, v_map, a_map = build_post_concat_finishing_filters(
+            "[vout]",
+            "[aout]",
+            total_duration_sec=total_eff_dur,
+            burn_srt_path=srt_path if burn_subtitles else None,
+            intro_title=intro_title,
+            fade_out_outro_sec=fade_out_outro_sec,
+            normalize_audio_loudness=normalize_audio_loudness,
+        )
+        filter_parts.extend(extra_clauses)
+        cmd.extend(["-filter_complex", ";".join(filter_parts), "-map", v_map, "-map", a_map or "[aout]", "-c:a", "aac", "-b:a", "192k"])
     else:
         v_inputs = "".join(f"[v{i}]" for i in range(len(clip_paths)))
         filter_parts.append(f"{v_inputs}concat=n={len(clip_paths)}:v=1:a=0[vout]")
-        cmd.extend(["-filter_complex", ";".join(filter_parts), "-map", "[vout]"])
+        extra_clauses, v_map, _ = build_post_concat_finishing_filters(
+            "[vout]",
+            None,
+            total_duration_sec=total_eff_dur,
+            burn_srt_path=srt_path if burn_subtitles else None,
+            intro_title=intro_title,
+            fade_out_outro_sec=fade_out_outro_sec,
+            normalize_audio_loudness=False,
+        )
+        filter_parts.extend(extra_clauses)
+        cmd.extend(["-filter_complex", ";".join(filter_parts), "-map", v_map])
         if narration_idx is not None:
             cmd.extend(["-map", f"{narration_idx}:a:0", "-c:a", "aac", "-shortest"])
         elif len(clip_paths) == 1:
@@ -381,6 +382,10 @@ async def compose_storyboard_clips(
     target_height: int = 0,
     narration_audio: Optional[str] = None,
     subtitles: Optional[List[Dict[str, Any]]] = None,
+    normalize_audio_loudness: bool = False,
+    burn_subtitles: bool = False,
+    intro_title: Optional[str] = None,
+    fade_out_outro_sec: float = 0.0,
     canvas_id: str = "",
     session_id: str = "",
     files_dir: Optional[str] = None,
@@ -484,6 +489,10 @@ async def compose_storyboard_clips(
             clip_specs=clip_specs,
             preserve_clip_audio=preserve_clip_audio,
             transition_fade_sec=transition_fade_sec,
+            normalize_audio_loudness=normalize_audio_loudness,
+            burn_subtitles=burn_subtitles,
+            intro_title=intro_title,
+            fade_out_outro_sec=fade_out_outro_sec,
         )
         proc = await asyncio.to_thread(
             subprocess.run,

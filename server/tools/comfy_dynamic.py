@@ -22,6 +22,10 @@ from services.comfy_instance_service import (
 )
 from services.config_service import FILES_DIR, IMAGE_FORMATS, VIDEO_FORMATS
 from services.db_service import db_service
+from services.gpu_compatibility_guard import (
+    ensure_fresh_instance_health,
+    evaluate_workflow_hardware_guard,
+)
 from services.websocket_service import broadcast_session_update, send_to_websocket
 from tools.video_generation.video_canvas_utils import (
     generate_new_audio_element,
@@ -335,6 +339,21 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         }
 
         required_data = dict(kwargs)
+        base_workflow_dict = await db_service.get_comfy_workflow(wf["id"])
+        health_metrics = await ensure_fresh_instance_health(instance)
+        hw_guard = evaluate_workflow_hardware_guard(
+            str(wf.get("name") or ""),
+            base_workflow_dict,
+            required_data,
+            health_metrics,
+        )
+        if hw_guard.get("blocked"):
+            reason = str(hw_guard.get("reason") or "远端显卡规格不兼容")
+            await send_to_websocket(session_id, {"type": "error", "error": reason})
+            return f"image generation failed: {reason}"
+        if hw_guard.get("adjusted_params"):
+            required_data.update(hw_guard["adjusted_params"])
+
         # 提取原始输入媒体文件名与提示词参数，供生成元素写入 customData 血缘谱系（C9）
         lineage_parent_files: List[str] = []
         lineage_prompt = ""
@@ -408,8 +427,6 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         except (PathSecurityError, FileNotFoundError) as exc:
             await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
             return f"image generation failed: {str(exc)}"
-
-        base_workflow_dict = await db_service.get_comfy_workflow(wf["id"])
 
         seed_strategy = str(wf.get("seed_strategy") or "random")
         workflow_dict = apply_workflow_inputs_and_seeds(

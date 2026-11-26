@@ -1,5 +1,14 @@
 ﻿# Jaaz 变更记录（Changelog）
 
+## 2026-11-26 — 阶段 P5 分钟级长片生产闭环、远端 GPU 自适应防呆与云盘工作台
+
+### 新增（Added）
+- **长视频自动分块断点超分内置化（P5-1）**：新增 `long_video_pipeline_service.py`、`upscale_job_store.py` 与系统工具 `video_upscale_chunked`，根据远端 `/system_stats` 可用内存自动计算安全切片时长（如 50GiB 内存取 `15.0s`、28GiB 取 `10.0s`），通过内置 `server/bin/ffmpeg.exe` 预切片并逐块执行 `SeedVR2` 超分；Colab 断线时自动持久化 `paused_offline` 检查点，恢复后跳过已完成切片，并在合片阶段无损回灌原视频完整立体声音轨写入画布血缘。
+- **角色定妆锚定与视频抽帧接力工具（P5-2）**：新增 `extract_video_frame` 系统工具与 `/api/studio/extract_frame` 接口，支持提取上一段视频尾帧、首帧或指定秒数关键帧 PNG 并挂载 `jaazLineage`，供下一段 `image2video_first_frame` 或 `ref2video_dual` 锁定人物面容与服饰衔接。
+- **远端 GPU 规格自适应防呆与 Colab 换址热续跑（P5-3）**：新增 `gpu_compatibility_guard.py` 并在 `comfy_dynamic.py` 接入前置检测，自动拦截 Turing 及更早架构（如 Tesla T4 `SM 7.5` / `<16 GiB` 显存）运行 `NVFP4` 重型工作流并放行 `SeedVR2`，对 24GB 级显存执行 `>=12s` 长视频自动约束 `megapixels=0.45` 防 `VAEDecode` 溢出；新增 `POST /api/studio/hot_resume_colab` 事务更新隧道地址、清空过期上传缓存并探测显卡。
+- **内置 `ffmpeg` 成片精装升级（P5-4）**：新增 `video_finishing_service.py`，扩展 `video_edit_and_stitch` 与 `/api/studio/compose_video` 支持 `loudnorm`（EBU R128 `-16 LUFS` 响度均衡）、Windows 路径转义硬烧录 SRT 字幕、片头标题渐显与片尾黑场音画淡出。
+- **工作台「云盘映射与清理」面板（P5-5）**：新增 `storage_cleanup_service.py`、`studio_p5_routes.py` 与前端 `StudioMappingsAndCleanupTab.tsx`，提供 `file_mappings` 云盘双向映射响应式数据表、Colab 换址续跑控件，以及零画布引用核验的孤立临时切片只读扫描与显式二次确认删除模态框。
+
 ## 2026-11-25 — 阶段 P1–P4 执行链路加固、Agent 画布编排、深度交互与模块拆分
 
 ### 修复与加固（Fixed）

@@ -11,6 +11,10 @@ from tools.canvas_tools import (
     canvas_connect_and_badge_tool,
 )
 from tools.comfy_dynamic import build_tool
+from tools.long_video_tools import (
+    extract_video_frame_tool,
+    video_upscale_chunked_tool,
+)
 from tools.video_edit_tools import video_edit_and_stitch_tool
 from tools.write_plan import write_plan_tool
 from services.comfy_instance_service import comfy_instance_service
@@ -47,6 +51,20 @@ class ToolService:
                 "provider": "system",
                 "tool_function": video_edit_and_stitch_tool,
                 "display_name": "FFmpeg 视频自动剪辑与拼接",
+                "type": "video",
+                "capability": "i2v",
+            }
+            self.tools["extract_video_frame"] = {
+                "provider": "system",
+                "tool_function": extract_video_frame_tool,
+                "display_name": "FFmpeg 视频关键帧/尾帧提取",
+                "type": "image",
+                "capability": "i2i",
+            }
+            self.tools["video_upscale_chunked"] = {
+                "provider": "system",
+                "tool_function": video_upscale_chunked_tool,
+                "display_name": "SeedVR2 长视频自动分块断点超分",
                 "type": "video",
                 "capability": "i2v",
             }

@@ -1,6 +1,7 @@
 """程序说明：提供跨画布资产检索库（M1）、形状与流程模板库（E10/W1）、表格变量批量解析（W2）及 TTS/ffmpeg 合片路由（V3/V4）。"""
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
@@ -14,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 import httpx
 from pydantic import BaseModel
 
+from routers.studio_p5_routes import router as studio_p5_router
 from services.config_service import FILES_DIR, USER_DATA_DIR, config_service
 from services.db_service import db_service
 from services.file_mapping_service import backfill_historical_mappings, list_file_mappings
@@ -149,6 +151,10 @@ class ComposeVideoRequest(BaseModel):
     target_height: int = 0
     narration_audio: Optional[str] = None
     subtitles: Optional[List[Dict[str, Any]]] = None
+    normalize_audio_loudness: bool = False
+    burn_subtitles: bool = False
+    intro_title: Optional[str] = None
+    fade_out_outro_sec: float = 0.0
     canvas_id: str = ""
     session_id: str = ""
 
@@ -310,6 +316,10 @@ async def compose_video_endpoint(req: ComposeVideoRequest):
             target_height=req.target_height,
             narration_audio=req.narration_audio,
             subtitles=req.subtitles,
+            normalize_audio_loudness=req.normalize_audio_loudness,
+            burn_subtitles=req.burn_subtitles,
+            intro_title=req.intro_title,
+            fade_out_outro_sec=req.fade_out_outro_sec,
             canvas_id=req.canvas_id,
             session_id=req.session_id,
         )
@@ -409,3 +419,6 @@ async def get_file_mappings_endpoint(refresh: bool = False):
     except Exception as exc:
         _logger.error("读取文件映射表失败: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+router.include_router(studio_p5_router)

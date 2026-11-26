@@ -62,7 +62,23 @@ class VideoEditAndStitchInput(BaseModel):
     )
     subtitles: Optional[List[SubtitleLineSpec]] = Field(
         default=None,
-        description="可选。写入 MP4 容器的时间轴软字幕列表。",
+        description="可选。时间轴字幕列表（默认写入 MP4 软字幕轨；配合 burn_subtitles=true 可直接硬烧录至画面）。",
+    )
+    burn_subtitles: bool = Field(
+        default=False,
+        description="可选。是否将 subtitles 字幕带描边直接硬烧录到视频像素画面中（默认 false）。",
+    )
+    normalize_audio_loudness: bool = Field(
+        default=False,
+        description="可选。是否启用 EBU R128 (loudnorm -16 LUFS) 自动均衡多段视频响度差异（默认 false）。",
+    )
+    intro_title: Optional[str] = Field(
+        default=None,
+        description="可选。片头淡入叠加显示的电影标题文案。",
+    )
+    fade_out_outro_sec: float = Field(
+        default=0.0,
+        description="可选。成片结尾黑场与伴音同步淡出的秒数（如 1.0 秒；默认 0.0）。",
     )
     target_width: int = Field(
         default=0,
@@ -92,6 +108,10 @@ async def video_edit_and_stitch_tool(
     preserve_clip_audio: bool = True,
     narration_audio: Optional[str] = None,
     subtitles: Optional[List[SubtitleLineSpec]] = None,
+    burn_subtitles: bool = False,
+    normalize_audio_loudness: bool = False,
+    intro_title: Optional[str] = None,
+    fade_out_outro_sec: float = 0.0,
     target_width: int = 0,
     target_height: int = 0,
 ) -> str:
@@ -121,6 +141,10 @@ async def video_edit_and_stitch_tool(
             target_height=target_height,
             narration_audio=narration_audio,
             subtitles=subs_dicts,
+            normalize_audio_loudness=normalize_audio_loudness,
+            burn_subtitles=burn_subtitles,
+            intro_title=intro_title,
+            fade_out_outro_sec=fade_out_outro_sec,
             canvas_id=canvas_id,
             session_id=session_id,
         )

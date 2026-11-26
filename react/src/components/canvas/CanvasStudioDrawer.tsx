@@ -12,6 +12,7 @@ import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 import { Clapperboard, FolderSearch, Grid2X2, LayoutTemplate, Plus, Search } from 'lucide-react'
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import StudioMappingsAndCleanupTab from './StudioMappingsAndCleanupTab'
 
 type StudioAsset = {
   file_id: string
@@ -45,8 +46,9 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
   const { excalidrawAPI } = useCanvas()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
+  const tabBaseId = useId()
 
-  const [tab, setTab] = useState<'assets' | 'templates' | 'batch'>('assets')
+  const [tab, setTab] = useState<'assets' | 'templates' | 'batch' | 'mappings'>('assets')
   const [query, setQuery] = useState('')
   const [kindFilter, setKindFilter] = useState<'all' | 'image' | 'video' | 'audio'>('all')
   const [assets, setAssets] = useState<StudioAsset[]>([])
@@ -64,6 +66,9 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
   const [selectedComposeVideos, setSelectedComposeVideos] = useState<string[]>([])
   const [composeTrimSec, setComposeTrimSec] = useState<string>('')
   const [composeFadeSec, setComposeFadeSec] = useState<string>('0.2')
+  const [composeLoudnorm, setComposeLoudnorm] = useState<boolean>(true)
+  const [composeOutroSec, setComposeOutroSec] = useState<string>('0.6')
+  const [composeIntroTitle, setComposeIntroTitle] = useState<string>('')
   const [composeBusy, setComposeBusy] = useState(false)
 
   const fetchAssets = async (q = query, kind = kindFilter) => {
@@ -90,7 +95,7 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
     }
   }
 
-  const openStudio = (nextTab: 'assets' | 'templates' | 'batch') => {
+  const openStudio = (nextTab: 'assets' | 'templates' | 'batch' | 'mappings') => {
     setTab(nextTab)
     if (nextTab === 'assets') void fetchAssets()
     if (nextTab === 'templates') void fetchTemplates()
@@ -320,6 +325,7 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
     try {
       const trimVal = Number(composeTrimSec)
       const fadeVal = Number(composeFadeSec)
+      const outroVal = Number(composeOutroSec)
       const resp = await apiFetch('/api/studio/compose_video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -330,6 +336,10 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
           transition_fade_sec:
             Number.isFinite(fadeVal) && fadeVal >= 0 ? fadeVal : 0.2,
           preserve_clip_audio: true,
+          normalize_audio_loudness: composeLoudnorm,
+          intro_title: composeIntroTitle.trim() || null,
+          fade_out_outro_sec:
+            Number.isFinite(outroVal) && outroVal >= 0 ? outroVal : 0,
           canvas_id: canvasId,
         }),
       })
@@ -367,38 +377,61 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
         className="jaaz-native-modal rounded-xl border bg-background p-5 text-foreground shadow-2xl max-w-3xl w-[94vw]"
       >
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between border-b pb-2.5">
-            <div className="flex items-center gap-2">
-              <h1 id={titleId} className="text-base font-semibold">
-                资产库、形状模板与批量合片工作台
+          <div className="flex items-center justify-between gap-2 border-b pb-1.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <h1 id={titleId} className="shrink-0 text-base font-semibold">
+                创作与长片工作台
               </h1>
-              <div className="ml-2 inline-flex rounded-md border p-0.5 text-xs">
+              <div
+                role="tablist"
+                aria-label="创作工作台功能分区"
+                className="jaaz-studio-tablist"
+              >
                 <button
                   type="button"
+                  role="tab"
+                  id={`${tabBaseId}-assets`}
+                  aria-selected={tab === 'assets'}
                   onClick={() => {
                     setTab('assets')
                     void fetchAssets()
                   }}
-                  className={`rounded px-2.5 py-1 ${tab === 'assets' ? 'bg-primary text-primary-foreground' : ''}`}
+                  className="jaaz-studio-tab"
                 >
                   跨画布资产库
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  id={`${tabBaseId}-templates`}
+                  aria-selected={tab === 'templates'}
                   onClick={() => {
                     setTab('templates')
                     void fetchTemplates()
                   }}
-                  className={`rounded px-2.5 py-1 ${tab === 'templates' ? 'bg-primary text-primary-foreground' : ''}`}
+                  className="jaaz-studio-tab"
                 >
                   形状与技能模板
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  id={`${tabBaseId}-batch`}
+                  aria-selected={tab === 'batch'}
                   onClick={() => setTab('batch')}
-                  className={`rounded px-2.5 py-1 ${tab === 'batch' ? 'bg-primary text-primary-foreground' : ''}`}
+                  className="jaaz-studio-tab"
                 >
-                  表格批量 & 视频合片
+                  表格批量 & 视频精装
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id={`${tabBaseId}-mappings`}
+                  aria-selected={tab === 'mappings'}
+                  onClick={() => setTab('mappings')}
+                  className="jaaz-studio-tab"
+                >
+                  云盘映射与清理
                 </button>
               </div>
             </div>
@@ -409,7 +442,11 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
             </form>
           </div>
 
-          {tab === 'assets' && (
+          <div
+            role="tabpanel"
+            aria-labelledby={`${tabBaseId}-assets`}
+            hidden={tab !== 'assets'}
+          >
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
@@ -499,9 +536,13 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                 )}
               </div>
             </div>
-          )}
+          </div>
 
-          {tab === 'templates' && (
+          <div
+            role="tabpanel"
+            aria-labelledby={`${tabBaseId}-templates`}
+            hidden={tab !== 'templates'}
+          >
             <div className="space-y-3">
               <div className="grid max-h-[34vh] grid-cols-2 gap-2.5 overflow-y-auto pr-1">
                 {templates.map((tpl) => (
@@ -555,9 +596,13 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                 </Button>
               </div>
             </div>
-          )}
+          </div>
 
-          {tab === 'batch' && (
+          <div
+            role="tabpanel"
+            aria-labelledby={`${tabBaseId}-batch`}
+            hidden={tab !== 'batch'}
+          >
             <div className="grid grid-cols-2 gap-4 text-xs">
               <div className="space-y-2 rounded-lg border p-3">
                 <div className="flex items-center gap-1.5 font-semibold">
@@ -643,7 +688,39 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                       className="h-7 w-full rounded border bg-background px-2"
                     />
                   </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">片头标题渐显（可空）</span>
+                    <input
+                      type="text"
+                      value={composeIntroTitle}
+                      onChange={(e) => setComposeIntroTitle(e.target.value)}
+                      placeholder="如 江南夜雨"
+                      className="h-7 w-full rounded border bg-background px-2"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">片尾黑场淡出（秒）</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="0.2"
+                      value={composeOutroSec}
+                      onChange={(e) => setComposeOutroSec(e.target.value)}
+                      className="h-7 w-full rounded border bg-background px-2"
+                    />
+                  </label>
                 </div>
+                <label className="flex items-center gap-2 pt-0.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={composeLoudnorm}
+                    onChange={(e) => setComposeLoudnorm(e.target.checked)}
+                  />
+                  <span className="text-[11px] text-muted-foreground">
+                    启用 EBU R128 响度自动均衡（消除多段音量跳跃）
+                  </span>
+                </label>
                 <Button
                   size="sm"
                   variant="secondary"
@@ -651,11 +728,22 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                   className="w-full h-8 text-xs"
                   onClick={() => void handleComposeSelectedVideos()}
                 >
-                  {composeBusy ? 'ffmpeg 剪辑拼接中…' : `自动剪辑并拼接 (${selectedComposeVideos.length})`}
+                  {composeBusy ? 'ffmpeg 精装合片中…' : `自动剪辑精装拼接 (${selectedComposeVideos.length})`}
                 </Button>
               </div>
             </div>
-          )}
+          </div>
+
+          <div
+            role="tabpanel"
+            aria-labelledby={`${tabBaseId}-mappings`}
+            hidden={tab !== 'mappings'}
+          >
+            <StudioMappingsAndCleanupTab
+              canvasId={canvasId}
+              active={tab === 'mappings'}
+            />
+          </div>
         </div>
       </dialog>
     </>

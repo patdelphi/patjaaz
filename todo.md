@@ -408,3 +408,14 @@
 3. [x] 在画布 `film-1min-4x15s-2026`（`https://jaaz.patdelphi.xyz/canvas/film-1min-4x15s-2026`）完成《江南夜雨·一盏江湖》1 分钟（`4 × 15.0s`）四篇章五拍完整分镜排布，并串行生成 4 段完整 15 秒有声视频（`1n8wCYLbMD.mp4`、`7nlR5sICvj.mp4`、`l0YOL01b3x.mp4`、`9Tfcqv9T5t.mp4`，每段实测均为 `15.083s` / `362` 帧 @ `24fps` / `928×512` / `aac` 立体声）。
 4. [x] 通过真实聊天让 Jaaz 智能体自动调用 `video_edit_and_stitch`，将 4 段分镜截齐为 `15.0s × 4` 并拼接生成 **`60.0` 秒整 1 分钟有声总成片** `composed_im_yC4Cbx-G.mp4`（耗时 `30.1s`），完成画布总装连线、血缘记录与声画抽帧核验。
 5. [x] 新增 `file_mapping_service.py`（`GET /api/studio/file_mappings` + UTF-8 BOM + CRLF `file_mappings.csv` 自动双向记录 ComfyUI 与 `H:` 云盘文件）；在 Colab Tesla T4（15GB 显存）上完成 `6 × 10s` 分段 `SeedVR2 3B` `2×` 超分并由内置 `ffmpeg` 合流原 60s 立体声音轨产出 **`1856 × 1024` 全高清终版** `upscaled_x2_60s_master.mp4`（`97.66 MB`）。
+
+---
+
+## 阶段 P5：分钟级长片生产闭环与硬件自适应守护（2026-11-26 已完成）
+
+### 范围与阶段
+1. [x] **P5-1 长视频自动分块超分与断点续跑内置化**：按远端可用内存自动计算安全切片秒数，使用内置 `ffmpeg` 预切片并逐段调用 `SeedVR2` 超分落盘记录进度；支持远端断线后从已完成切片断点续跑，并自动无损合流原视频音轨写回画布。
+2. [x] **P5-2 角色定妆锚定与视频抽帧接力串联工具**：新增内置 `ffmpeg` 视频关键帧/尾帧提取工具 `extract_video_frame` 并挂载画布血缘，支持分钟级多段视频自动抽尾帧接力 `image2video_first_frame` / `ref2video_dual` 锁定人物与服饰一致性。
+3. [x] **P5-3 远端 GPU 规格自适应防呆与 Colab 换址热续跑**：在工作流执行前检测 `/system_stats` 显卡架构与显存/内存（如拦截 T4 `SM 7.5` 上的 `NVFP4` 大模型报错、自动约束 15 秒长视频安全 `megapixels`），并提供 Colab 新隧道地址一键热更新与挂起队列续跑接口。
+4. [x] **P5-4 内置 `ffmpeg` 成片精装升级**：扩展 `video_edit_and_stitch` 支持 `loudnorm`（EBU R128）多段响度自动均衡、SRT 硬字幕画面烧录（自定义字号描边）及片头标题渐显与片尾黑场淡出。
+5. [x] **P5-5 前端「云盘映射与存储清理」工作台面板**：在 `CanvasStudioDrawer` 新增云盘映射检索标签页、断点超分任务续跑/Colab 换址入口，以及未绑定任何画布的孤立临时切片扫描与显式二次确认清理功能。

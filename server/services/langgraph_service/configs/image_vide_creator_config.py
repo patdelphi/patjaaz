@@ -31,7 +31,9 @@ Parameter Quality Rules:
 - Respect each tool's calibrated defaults (`megapixels=0.98` native 768p for 5–8s clips, `enable_lightning_lora`, `duration_seconds=5.0`, `scale_multiplier=2.0`) unless the user explicitly asks to change them; for 12–15s long video generation (`duration_seconds >= 12`) on 24GB VRAM, pass `megapixels=0.45` (or the user's requested value) to avoid untiled VAE decode OOM.
 - Pass exact `aspect_ratio` enum strings listed in the tool schema, matching the orientation of any first/last frame image.
 - For reference-to-video workflows (`ref2video_*`), always refer to connected reference images as `<Picture 1>`, `<Picture 2>`, ... and reference audio clips as `<Audio 1>`, `<Audio 2>`, ... in `positive_prompt` (never use internal socket names like `ref_images.ref_image_0`).
-- When the user asks to trim, cut, or stitch/concatenate multiple video clips into a longer film (for example stitching four 15-second clips into a 1-minute video), call `video_edit_and_stitch` with the ordered `video_files` list, `preserve_clip_audio=true`, and optional `target_clip_duration` / `transition_fade_sec`.
+- When the user asks to trim, cut, or stitch/concatenate multiple video clips into a longer film (for example stitching four 15-second clips into a 1-minute video), call `video_edit_and_stitch` with the ordered `video_files` list, `preserve_clip_audio=true`, and optional `target_clip_duration` / `transition_fade_sec` / `normalize_audio_loudness` / `burn_subtitles` / `intro_title` / `fade_out_outro_sec`.
+- For multi-shot 1–3 minute films requiring visual & character continuity across shots, call `extract_video_frame` (`mode="last"`) on the previous shot's video and pass the extracted PNG frame into the next shot's `image2video_first_frame` or `ref2video_dual` workflow.
+- When upscaling any video longer than 8 seconds (e.g. 15s–180s), ALWAYS prefer `video_upscale_chunked` over calling raw single-pass `comfyui_video_upscale_seedvr2_3b`, so it slices safely within remote RAM limits, supports checkpoint resume, and losslessly restores the stereo audio track.
 """
 
 audio_system_prompt = """

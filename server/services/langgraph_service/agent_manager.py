@@ -92,11 +92,17 @@ class AgentManager:
                     business_tools.append(sys_tool)
                     seen_tool_ids.add(sys_canvas_tid)
 
-        if config.name != 'planner' and 'video_edit_and_stitch' not in seen_tool_ids:
-            stitch_tool = tool_service.get_tool('video_edit_and_stitch')
-            if stitch_tool:
-                business_tools.append(stitch_tool)
-                seen_tool_ids.add('video_edit_and_stitch')
+        if config.name != 'planner':
+            for media_sys_tid in (
+                'video_edit_and_stitch',
+                'extract_video_frame',
+                'video_upscale_chunked',
+            ):
+                if media_sys_tid not in seen_tool_ids:
+                    media_sys_tool = tool_service.get_tool(media_sys_tid)
+                    if media_sys_tool:
+                        business_tools.append(media_sys_tool)
+                        seen_tool_ids.add(media_sys_tid)
 
         # 创建并返回 LangGraph 智能体
         return create_react_agent(
