@@ -355,6 +355,25 @@ class StageP5LongFilmLoopTests(unittest.IsolatedAsyncioTestCase):
                 os.path.isfile(os.path.join(files_dir, "src_slice_00_0s_10s.mp4"))
             )
 
+    def test_p5_1b_seedvr2_real_workflow_video_param_binding(self) -> None:
+        """回归验证：SeedVR2 分块超分必须将上传切片名绑定到 LoadVideo 节点（source_video），严禁残留示例视频名。"""
+        from services.upscale_job_store import build_upscale_workflow_inputs
+        from tools.comfy_dynamic import apply_workflow_inputs_and_seeds
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        wf_dir = os.path.join(repo_root, "workflows", "video_upscale_seedvr2_3b")
+        with open(os.path.join(wf_dir, "jaaz.workflow.json"), "r", encoding="utf-8") as mf:
+            meta = json.load(mf)
+        with open(os.path.join(wf_dir, "workflow.api.json"), "r", encoding="utf-8") as af:
+            api_wf = json.load(af)
+
+        mapped = build_upscale_workflow_inputs(meta["inputs"], "slice_000.mp4", 2.0)
+        payload = apply_workflow_inputs_and_seeds(
+            api_wf, meta["inputs"], mapped, seed_strategy="fixed"
+        )
+        self.assertEqual(payload["73"]["inputs"]["file"], "slice_000.mp4")
+        self.assertEqual(payload["66:57"]["inputs"]["resize_type.multiplier"], 2.0)
+
     def test_p5_modules_stay_under_600_lines(self) -> None:
         """验证阶段 P5 新增与扩展的后端模块均保持不超过 600 行（R-17 延续约束）。"""
         server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -103,6 +103,27 @@ def list_upscale_jobs(jobs_dir: Optional[str] = None) -> List[Dict[str, Any]]:
     return out
 
 
+def build_upscale_workflow_inputs(
+    input_defs: List[Dict[str, Any]],
+    uploaded_name: str,
+    scale_multiplier: float,
+) -> Dict[str, Any]:
+    """根据超分工作流 schema 动态绑定上传切片视频参数名（如 source_video），防止回退到工作流示例视频。"""
+    mapped: Dict[str, Any] = {
+        "source_video": uploaded_name,
+        "input_video": uploaded_name,
+        "scale_multiplier": float(scale_multiplier),
+    }
+    for param in input_defs:
+        if not isinstance(param, dict):
+            continue
+        pname = str(param.get("name") or "").strip()
+        ptype = str(param.get("type") or "").strip().lower()
+        if pname and (ptype == "video" or pname in ("source_video", "input_video", "video")):
+            mapped[pname] = uploaded_name
+    return mapped
+
+
 async def default_seedvr2_chunk_upscaler(
     slice_path: str,
     dest_chunk_path: str,
@@ -148,10 +169,7 @@ async def default_seedvr2_chunk_upscaler(
     wf_payload = apply_workflow_inputs_and_seeds(
         base_wf_dict,
         input_defs,
-        {
-            "input_video": uploaded_name,
-            "scale_multiplier": float(scale_multiplier),
-        },
+        build_upscale_workflow_inputs(input_defs, uploaded_name, scale_multiplier),
         seed_strategy="fixed",
     )
 
