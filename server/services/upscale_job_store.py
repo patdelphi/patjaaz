@@ -120,7 +120,9 @@ async def default_seedvr2_chunk_upscaler(
         raise RuntimeError(f"数据库中未找到超分工作流 `{workflow_name}`")
 
     instance = await comfy_instance_service.resolve_instance(
-        target_wf.get("instance_id"), capability=target_wf.get("capability")
+        target_wf.get("instance_id"),
+        capability=target_wf.get("capability"),
+        workflow_name=workflow_name,
     )
     api_url = str(instance["base_url"]).rstrip("/")
     headers = dict(instance.get("headers") or {})

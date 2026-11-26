@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import hashlib
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional
 import urllib.parse
@@ -373,12 +374,63 @@ class ComfyInstanceService:
         health = self._parse_json_field(item.get("last_health_json"), {})
         return isinstance(health, dict) and health.get("online") is False
 
+    def _is_pre_ampere_or_under_16gb(self, item: Dict[str, Any]) -> Optional[bool]:
+        """根据实例健康快照判断是否属于 SM<8.0（如 Tesla T4）或 <15.8GiB 显存；无快照时返回 None。"""
+        health = self._parse_json_field(item.get("last_health_json"), {})
+        if not isinstance(health, dict):
+            return None
+        devices = health.get("devices")
+        if not isinstance(devices, list) or not devices or not isinstance(devices[0], dict):
+            return None
+        gpu_name = str(devices[0].get("name") or "").lower()
+        vram_total = int(devices[0].get("vram_total") or 0)
+        if not gpu_name and vram_total <= 0:
+            return None
+        pre_ampere = bool(
+            re.search(
+                r"\btesla\s+t4\b|\bt4\b|\bgtx\s*1[06]\d+|\brtx\s*20\d+|\bp100\b|\bp40?\b|\bv100\b|\bk80\b",
+                gpu_name,
+            )
+        )
+        under_16gb = 0 < vram_total < int(15.8 * (1024 ** 3))
+        return pre_ampere or under_16gb
+
+    def _heterogeneous_sort_key(
+        self,
+        item: Dict[str, Any],
+        workflow_name: Optional[str],
+        workflow_dict: Optional[Dict[str, Any]],
+    ) -> tuple[int, int]:
+        """异构多实例排序键：(离线惩罚, 架构适配度)，实现 L4/A100 跑重型出片、T4 并行跑 SeedVR2 超分。"""
+        offline_penalty = 1 if self._known_offline(item) else 0
+        if not workflow_name and not workflow_dict:
+            return (offline_penalty, 0)
+
+        family = infer_workflow_model_family(workflow_name or "", workflow_dict)
+        is_limited_gpu = self._is_pre_ampere_or_under_16gb(item)
+        caps = self._parse_json_field(item.get("capabilities_json"), [])
+
+        if family in ("minimax_h3_image", "minimax_h3_video", "sensenova"):
+            # 重型 NVFP4 工作流自动避开已知 T4 / <16GB 显存节点，优先落到 Ampere+ 大显存实例
+            hw_penalty = 2 if is_limited_gpu is True else 0
+            return (offline_penalty, hw_penalty)
+
+        if family == "seedvr2":
+            # 超分任务优先分流到显式声明 upscale 或次级 T4 节点，释放主 L4/A100 生成队列
+            is_dedicated_upscaler = ("upscale" in caps) or (is_limited_gpu is True)
+            hw_penalty = 0 if is_dedicated_upscaler else 1
+            return (offline_penalty, hw_penalty)
+
+        return (offline_penalty, 0)
+
     async def resolve_instance(
         self,
         instance_id: Optional[str] = None,
         capability: Optional[str] = None,
+        workflow_name: Optional[str] = None,
+        workflow_dict: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """按显式 instance_id 或（启用、支持能力、非已知离线、优先级）挑选 ComfyUI 实例，兼容 config 回退。"""
+        """按显式 instance_id 或（启用、支持能力、非已知离线、异构显卡分工、优先级）挑选 ComfyUI 实例。"""
         instances = await self.ensure_default_instance()
         chosen: Optional[Dict[str, Any]] = None
 
@@ -395,8 +447,11 @@ class ComfyInstanceService:
             # 优先选声明支持该能力的实例；都不支持时退回全部启用实例，避免默认能力清单漏项导致不可用
             capable = [i for i in enabled_list if self._supports_capability(i, capability)]
             pool = capable or enabled_list
-            # 列表已按 priority 排序；已知离线的实例排到最后
-            pool = sorted(pool, key=lambda i: 1 if self._known_offline(i) else 0)
+            # Python sort 为稳定排序：同键下严格保持数据库 priority ASC 顺序
+            pool = sorted(
+                pool,
+                key=lambda i: self._heterogeneous_sort_key(i, workflow_name, workflow_dict),
+            )
             if pool:
                 chosen = pool[0]
 

@@ -60,4 +60,13 @@ describe('Stage P5 Studio Mappings & Cleanup UI Standards', () => {
     expect(tabSrc).toMatch(/autoFocus[\s\S]{0,120}取消保留/)
     expect(tabSrc).toContain('confirm: true')
   })
+
+  it('exposes one-click project bundle zip export trigger in CanvasStudioDrawer', () => {
+    const drawerSrc = fs.readFileSync(
+      path.join(repoRoot, 'react/src/components/canvas/CanvasStudioDrawer.tsx'),
+      'utf-8'
+    )
+    expect(drawerSrc).toContain('/api/studio/export_bundle/')
+    expect(drawerSrc).toContain('导出工程包 (.zip)')
+  })
 })

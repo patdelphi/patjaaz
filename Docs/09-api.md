@@ -16,6 +16,9 @@
 | `POST` | `/api/canvas/create` | 创建画布；`messages` 为空时仅创建空白画布不触发智能体 |
 | `GET` | `/api/canvas/{id}` | 读取指定画布元素、文件映射与关联聊天会话 |
 | `POST` | `/api/canvas/{id}/save` | 保存画布数据；服务端持画布互斥锁并保留前端尚未感知的新生成媒体 |
+| `POST` | `/api/canvas/{id}/ops` | 元素级增量同步（`upsert` / `delete`），降低大画布高频保存体积 |
+| `GET / POST` | `/api/canvas/{id}/snapshots` | 查询或手动创建画布历史版本快照 |
+| `POST` | `/api/canvas/{id}/snapshots/{snap_id}/restore` | 在事务中回退指定画布至历史快照（回退前自动备份当前现场） |
 | `POST` | `/api/canvas/{id}/rename` | 重命名画布 |
 | `DELETE` | `/api/canvas/{id}/delete` | 事务级联删除画布及其聊天会话与消息 |
 | `POST` | `/api/upload_image` | 上传并校验图像文件，返回 `{"file_id", "width", "height", "url"}` |
@@ -41,8 +44,27 @@
 | `GET / POST / PUT / DELETE` | `/api/settings/comfyui/instances*` | ComfyUI 多实例增删改查与 `/check` 健康探测 |
 | `GET / POST / PUT / DELETE` | `/api/settings/comfyui/workflows*` | 工作流列表、成对导入、目录扫描、启停切换、`source/` 检测与 AI 自动解析导入 |
 
-## 5. Socket.IO `session_update` 核心事件
+## 5. 创作与长片工作台接口（`/api/studio`）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/studio/assets` | 跨全量画布按关键词与类型（图像/视频/音频）检索历史生成资产 |
+| `GET / POST` | `/api/studio/templates` | 读取内置分镜模板与保存用户自定义参数化提示词模板 |
+| `POST` | `/api/studio/batch_expand` | 解析 CSV/TSV 或单列变量文本并展开批量提示词 |
+| `POST` | `/api/studio/compose_video` | 调用内置 `ffmpeg` 执行多段分镜裁剪、转场、响度均衡（`loudnorm`）、硬烧录字幕与片头片尾精装合片 |
+| `POST` | `/api/studio/tts` | 多源语音合成（OpenAI / DashScope `qwen-tts` / 本机离线中文语音兜底）并写入画布音频卡 |
+| `POST` | `/api/studio/extract_audio` | 从指定视频剥离 48kHz 立体声 MP3 音频卡片并写入画布 |
+| `POST` | `/api/studio/extract_frame` | 提取视频首帧、尾帧或指定秒数关键帧 PNG 并写入画布血缘供长片接力 |
+| `GET` | `/api/studio/upscale_jobs` | 查询全部分块 `SeedVR2` 超分任务的进度与断点快照 |
+| `POST` | `/api/studio/upscale_chunked` | 按远端内存自动计算安全切片秒数启动或断点续跑长视频超分并无损合流音轨 |
+| `POST` | `/api/studio/hot_resume_colab` | 事务热更新 Colab 隧道地址、清空过期上传缓存、探测硬件并返回待续跑队列 |
+| `GET` | `/api/studio/file_mappings` | 查询（`?refresh=true` 增量扫描补全）本地短 ID 文件与 `H:` 云盘双向映射表 |
+| `GET` | `/api/studio/orphan_files` | 只读扫描未绑定任何画布或未完成超分任务的孤立临时切片与媒体文件 |
+| `POST` | `/api/studio/cleanup_orphans` | 在显式传入 `confirm: true` 且二次核验零画布引用后安全清理已勾选孤立文件 |
+| `GET` | `/api/studio/export_bundle/{canvas_id}` | 将画布 JSON、制片血缘单、云盘映射 CSV、字幕草稿及关联媒体一键打包为 `.zip` 下载 |
+
+## 6. Socket.IO `session_update` 核心事件
 
 - `delta` / `all_messages` / `done` / `error`：流式文本增量、消息同步、回合结束与错误通知。
 - `tool_call` / `tool_call_arguments` / `tool_call_progress` / `tool_call_result`：工具调用及 ComfyUI 实时节点/百分比进度。
-- `image_generated` / `video_generated` / `audio_generated`：新生成图像、视频、音频元素落盘后的实时画布同步事件。
+- `image_generated` / `video_generated` / `audio_generated` / `canvas_elements_updated`：新生成图像、视频、音频元素及原生画布排版工具落盘后的实时同步事件。

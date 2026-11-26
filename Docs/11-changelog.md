@@ -1,8 +1,11 @@
 ﻿# Jaaz 变更记录（Changelog）
 
-## 2026-11-26 — 阶段 P5 分钟级长片生产闭环、远端 GPU 自适应防呆与云盘工作台
+## 2026-11-26 — 阶段 P5–P6 长片生产闭环、异构 GPU 分流、全链路配音与工程归档
 
 ### 新增（Added）
+- **异构双实例自动分流调度（P6-3）**：升级 `comfy_instance_service.resolve_instance`，同时配置多台实例时，重型 `NVFP4` 工作流（`MiniMax H3` / `SenseNova`）自动避开 `SM < 8.0` 或 `<16 GiB` 显存节点路由至 L4/A100 实例，`SeedVR2` 超分优先分流至在线次级 T4 或 `upscale` 节点并行执行。
+- **多源旁白语音合成与视频音轨剥离（P6-2）**：新增 `local_audio_service.py` 与系统工具 `synthesize_speech_narration`、`extract_video_audio`，打通 OpenAI `/audio/speech`、阿里云百炼原生 `qwen-tts` 及 Windows 离线中文语音 + 内置 `ffmpeg` 响度均衡兜底，支持一键剥离视频音轨卡片。
+- **短片制片工程包一键归档导出（P6-4）**：新增 `project_bundle_service.py` 与 `GET /api/studio/export_bundle/{canvas_id}`，将画布 `canvas.json`、UTF-8 BOM+CRLF 制片血缘单、云盘映射 CSV、SRT 字幕草稿与关联媒体打包为 `.zip` 供工作台一键下载；同步补齐 `Docs/09-api.md` 全量接口表。
 - **长视频自动分块断点超分内置化（P5-1）**：新增 `long_video_pipeline_service.py`、`upscale_job_store.py` 与系统工具 `video_upscale_chunked`，根据远端 `/system_stats` 可用内存自动计算安全切片时长（如 50GiB 内存取 `15.0s`、28GiB 取 `10.0s`），通过内置 `server/bin/ffmpeg.exe` 预切片并逐块执行 `SeedVR2` 超分；Colab 断线时自动持久化 `paused_offline` 检查点，恢复后跳过已完成切片，并在合片阶段无损回灌原视频完整立体声音轨写入画布血缘。
 - **角色定妆锚定与视频抽帧接力工具（P5-2）**：新增 `extract_video_frame` 系统工具与 `/api/studio/extract_frame` 接口，支持提取上一段视频尾帧、首帧或指定秒数关键帧 PNG 并挂载 `jaazLineage`，供下一段 `image2video_first_frame` 或 `ref2video_dual` 锁定人物面容与服饰衔接。
 - **远端 GPU 规格自适应防呆与 Colab 换址热续跑（P5-3）**：新增 `gpu_compatibility_guard.py` 并在 `comfy_dynamic.py` 接入前置检测，自动拦截 Turing 及更早架构（如 Tesla T4 `SM 7.5` / `<16 GiB` 显存）运行 `NVFP4` 重型工作流并放行 `SeedVR2`，对 24GB 级显存执行 `>=12s` 长视频自动约束 `megapixels=0.45` 防 `VAEDecode` 溢出；新增 `POST /api/studio/hot_resume_colab` 事务更新隧道地址、清空过期上传缓存并探测显卡。

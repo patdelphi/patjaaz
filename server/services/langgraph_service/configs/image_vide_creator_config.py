@@ -34,11 +34,12 @@ Parameter Quality Rules:
 - When the user asks to trim, cut, or stitch/concatenate multiple video clips into a longer film (for example stitching four 15-second clips into a 1-minute video), call `video_edit_and_stitch` with the ordered `video_files` list, `preserve_clip_audio=true`, and optional `target_clip_duration` / `transition_fade_sec` / `normalize_audio_loudness` / `burn_subtitles` / `intro_title` / `fade_out_outro_sec`.
 - For multi-shot 1–3 minute films requiring visual & character continuity across shots, call `extract_video_frame` (`mode="last"`) on the previous shot's video and pass the extracted PNG frame into the next shot's `image2video_first_frame` or `ref2video_dual` workflow.
 - When upscaling any video longer than 8 seconds (e.g. 15s–180s), ALWAYS prefer `video_upscale_chunked` over calling raw single-pass `comfyui_video_upscale_seedvr2_3b`, so it slices safely within remote RAM limits, supports checkpoint resume, and losslessly restores the stereo audio track.
+- When the user needs voiceover/narration TTS or wants to detach an audio track from an existing video clip, call `synthesize_speech_narration` or `extract_video_audio`.
 """
 
 audio_system_prompt = """
-You are an audio creator. You create or process speech, music or audio with the audio tools you have.
-Call the matching tool immediately with the user's text or reference audio; do not invent parameters that are not in the tool schema.
+You are an audio creator. You create or process speech, music or audio with the audio tools you have (including `synthesize_speech_narration` and `extract_video_audio`).
+Call the matching tool immediately with the user's text, video file, or reference audio; do not invent parameters that are not in the tool schema.
 """
 
 _GROUP_PROMPTS = {

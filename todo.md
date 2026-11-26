@@ -419,3 +419,13 @@
 3. [x] **P5-3 远端 GPU 规格自适应防呆与 Colab 换址热续跑**：在工作流执行前检测 `/system_stats` 显卡架构与显存/内存（如拦截 T4 `SM 7.5` 上的 `NVFP4` 大模型报错、自动约束 15 秒长视频安全 `megapixels`），并提供 Colab 新隧道地址一键热更新与挂起队列续跑接口。
 4. [x] **P5-4 内置 `ffmpeg` 成片精装升级**：扩展 `video_edit_and_stitch` 支持 `loudnorm`（EBU R128）多段响度自动均衡、SRT 硬字幕画面烧录（自定义字号描边）及片头标题渐显与片尾黑场淡出。
 5. [x] **P5-5 前端「云盘映射与存储清理」工作台面板**：在 `CanvasStudioDrawer` 新增云盘映射检索标签页、断点超分任务续跑/Colab 换址入口，以及未绑定任何画布的孤立临时切片扫描与显式二次确认清理功能。
+
+---
+
+## 阶段 P6：异构双实例算力分流、全链路音频配音闭环与工程包归档（2026-11-26 已完成）
+
+### 范围与阶段
+1. [x] **P6-1 启动 `57988` 服务并完成阶段 P5/P6 在线全接口验收**：重启加载阶段 P5/P6 新模块与前端构建包，实测云盘映射、分块超分队列、视频抽帧与工程包导出接口，并只读扫描展示孤立切片清单。
+2. [x] **P6-2 多源配音合成（DashScope/OpenAI/离线本机语音兜底）与视频音轨提取工具**：新增 `local_audio_service.py` 与系统工具 `synthesize_speech_narration` / `extract_video_audio`，打通云端与零外部依赖本机中文 TTS 兜底及视频原生音轨剥离入画。
+3. [x] **P6-3 异构双实例自动分流调度（L4/A100 出片 + T4 超分）**：升级 `comfy_instance_service.resolve_instance`，重型 `NVFP4` 工作流自动避开 `SM < 8.0` / 低显存实例路由至 Ampere+ 实例，`SeedVR2` 超分优先分流至次级 T4 或 `upscale` 实例并行执行。
+4. [x] **P6-4 短片制片工程包一键归档导出（Project Bundle ZIP）与 API 文档补齐**：新增 `project_bundle_service.py` 与 `/api/studio/export_bundle/{canvas_id}`（含 `canvas.json`、`production_sheet.md`、`file_mappings.csv`、`subtitles.srt` 及可选媒体资产）并在工作台提供一键下载，同步更新 `Docs/09-api.md` 与 `Docs/11-changelog.md`。

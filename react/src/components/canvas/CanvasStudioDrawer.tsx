@@ -9,7 +9,7 @@ import { eventBus } from '@/lib/event'
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { BinaryFileData } from '@excalidraw/excalidraw/types'
-import { Clapperboard, FolderSearch, Grid2X2, LayoutTemplate, Plus, Search } from 'lucide-react'
+import { Archive, Clapperboard, FolderSearch, Grid2X2, LayoutTemplate, Plus, Search } from 'lucide-react'
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import StudioMappingsAndCleanupTab from './StudioMappingsAndCleanupTab'
@@ -70,6 +70,7 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
   const [composeOutroSec, setComposeOutroSec] = useState<string>('0.6')
   const [composeIntroTitle, setComposeIntroTitle] = useState<string>('')
   const [composeBusy, setComposeBusy] = useState(false)
+  const [bundleBusy, setBundleBusy] = useState(false)
 
   const fetchAssets = async (q = query, kind = kindFilter) => {
     try {
@@ -359,6 +360,33 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
     }
   }
 
+  const handleExportProjectBundle = async () => {
+    setBundleBusy(true)
+    try {
+      const resp = await apiFetch(
+        `/api/studio/export_bundle/${encodeURIComponent(canvasId)}?include_media=true`
+      )
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}))
+        throw new Error(errBody?.detail || `HTTP ${resp.status}`)
+      }
+      const blob = await resp.blob()
+      const dlUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = dlUrl
+      anchor.download = `jaaz_bundle_${canvasId}.zip`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(dlUrl)
+      toast.success('已导出当前画布制片工程归档包 (.zip)')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '导出工程包失败')
+    } finally {
+      setBundleBusy(false)
+    }
+  }
+
   return (
     <>
       <Button
@@ -435,11 +463,24 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                 </button>
               </div>
             </div>
-            <form method="dialog">
-              <Button variant="ghost" size="sm" type="submit">
-                关闭
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                disabled={bundleBusy}
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => void handleExportProjectBundle()}
+              >
+                <Archive className="size-3.5" aria-hidden="true" />
+                <span>{bundleBusy ? '打包中…' : '导出工程包 (.zip)'}</span>
               </Button>
-            </form>
+              <form method="dialog">
+                <Button variant="ghost" size="sm" type="submit">
+                  关闭
+                </Button>
+              </form>
+            </div>
           </div>
 
           <div

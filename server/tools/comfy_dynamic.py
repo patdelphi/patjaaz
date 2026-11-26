@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 from io import BytesIO
 import json
 import os
@@ -309,9 +310,11 @@ def build_tool(wf: Dict[str, Any]) -> BaseTool:
         ctx["tool_call_id"] = tool_call_id
 
         try:
-            instance = await comfy_instance_service.resolve_instance(
-                wf.get("instance_id"), capability=wf.get("capability")
-            )
+            resolve_fn = comfy_instance_service.resolve_instance
+            resolve_kwargs: Dict[str, Any] = {"capability": wf.get("capability")}
+            if "workflow_name" in inspect.signature(resolve_fn).parameters:
+                resolve_kwargs["workflow_name"] = str(wf.get("name") or "")
+            instance = await resolve_fn(wf.get("instance_id"), **resolve_kwargs)
         except Exception as exc:
             await send_to_websocket(session_id, {"type": "error", "error": str(exc)})
             return f"image generation failed: {str(exc)}"

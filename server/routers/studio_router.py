@@ -19,6 +19,7 @@ from routers.studio_p5_routes import router as studio_p5_router
 from services.config_service import FILES_DIR, USER_DATA_DIR, config_service
 from services.db_service import db_service
 from services.file_mapping_service import backfill_historical_mappings, list_file_mappings
+from services.local_audio_service import synthesize_narration_speech
 from services.video_compose_service import compose_storyboard_clips
 from tools.utils.image_canvas_utils import generate_file_id
 from tools.video_generation.video_canvas_utils import generate_new_audio_element
@@ -336,74 +337,19 @@ async def compose_video_endpoint(req: ComposeVideoRequest):
 
 @router.post("/tts")
 async def synthesize_speech_endpoint(req: TtsGenerateRequest):
-    """调用已配置的 OpenAI 兼容语音端点将画布脚本合成为音频卡片写入画布（V3）。"""
+    """按优先级调用 OpenAI 兼容语音、DashScope Qwen-TTS 或本机离线中文语音将脚本合成为音频卡片写入画布（V3 / P6-2）。"""
     try:
-        text = req.text.strip()
-        if not text:
-            raise HTTPException(status_code=400, detail="TTS text is required")
-
-        cfg = config_service.get_config()
-        chosen_cfg: Optional[Dict[str, Any]] = None
-        if req.provider and isinstance(cfg.get(req.provider), dict) and cfg[req.provider].get("api_key"):
-            chosen_cfg = cfg[req.provider]
-        else:
-            for pname in ("openai", "dashscope"):
-                pc = cfg.get(pname)
-                if isinstance(pc, dict) and pc.get("api_key") and pc.get("url"):
-                    chosen_cfg = pc
-                    break
-
-        if not chosen_cfg:
-            raise HTTPException(
-                status_code=503,
-                detail="未检测到已配置密钥的语音合成提供商，请在设置中配置支持 /audio/speech 的提供商或启用 ComfyUI TTS 工作流",
-            )
-
-        base_url = str(chosen_cfg.get("url") or "").rstrip("/")
-        api_key = str(chosen_cfg.get("api_key") or "")
-        async with HttpClient.create(timeout=httpx.Timeout(60.0)) as client:
-            resp = await client.post(
-                f"{base_url}/audio/speech",
-                headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": req.model or "tts-1", "input": text[:2000], "voice": req.voice or "alloy"},
-            )
-            if resp.status_code >= 400:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"上游语音合成接口返回 HTTP {resp.status_code}",
-                )
-            audio_bytes = resp.content
-
-        aid = f"tts_{generate_file_id()}"
-        fname = f"{aid}.mp3"
-        out_path = os.path.join(FILES_DIR, fname)
-        with open(out_path, "wb") as af:
-            af.write(audio_bytes)
-
-        url = f"/api/file/{fname}"
-        if req.canvas_id:
-            fid = generate_file_id()
-            file_data = {
-                "mimeType": "audio/mpeg",
-                "id": fid,
-                "dataURL": url,
-                "created": int(time.time() * 1000),
-            }
-            async with canvas_lock_manager.lock_canvas(req.canvas_id):
-                canvas = await db_service.get_canvas_data(req.canvas_id)
-                data = (canvas or {}).get("data") or {}
-                data.setdefault("elements", [])
-                data.setdefault("files", {})
-                audio_el = await generate_new_audio_element(
-                    req.canvas_id, fid, {"width": 360, "height": 108, "url": url}, canvas_data=data
-                )
-                data["elements"].append(audio_el)
-                data["files"][fid] = file_data
-                await db_service.save_canvas_data(req.canvas_id, json.dumps(data))
-
-        return {"file_id": fname, "url": url}
-    except HTTPException:
-        raise
+        return await synthesize_narration_speech(
+            req.text,
+            voice=req.voice,
+            provider=req.provider,
+            model=req.model,
+            canvas_id=req.canvas_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         _logger.error("TTS 合成异常: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

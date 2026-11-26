@@ -6,6 +6,10 @@ import traceback
 from typing import Dict
 from langchain_core.tools import BaseTool
 from models.tool_model import ToolInfo
+from tools.audio_tools import (
+    extract_video_audio_tool,
+    synthesize_speech_narration_tool,
+)
 from tools.canvas_tools import (
     canvas_arrange_elements_tool,
     canvas_connect_and_badge_tool,
@@ -67,6 +71,20 @@ class ToolService:
                 "display_name": "SeedVR2 长视频自动分块断点超分",
                 "type": "video",
                 "capability": "i2v",
+            }
+            self.tools["synthesize_speech_narration"] = {
+                "provider": "system",
+                "tool_function": synthesize_speech_narration_tool,
+                "display_name": "多源中文旁白与台词语音合成",
+                "type": "audio",
+                "capability": "tts",
+            }
+            self.tools["extract_video_audio"] = {
+                "provider": "system",
+                "tool_function": extract_video_audio_tool,
+                "display_name": "FFmpeg 视频立体声音轨剥离",
+                "type": "audio",
+                "capability": "tts",
             }
         except ImportError as e:
             _logger.info(f"❌ 注册必须工具失败: {e}")

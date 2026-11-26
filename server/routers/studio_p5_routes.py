@@ -4,15 +4,17 @@ from __future__ import annotations
 import asyncio
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from services.gpu_compatibility_guard import hot_resume_colab_instance
+from services.local_audio_service import extract_audio_from_video
 from services.long_video_pipeline_service import (
     extract_video_anchor_frame,
     list_upscale_jobs,
     upscale_long_video_chunked,
 )
+from services.project_bundle_service import build_canvas_project_bundle_zip
 from services.storage_cleanup_service import (
     delete_confirmed_orphan_files,
     scan_orphan_media_files,
@@ -51,6 +53,13 @@ class HotResumeColabRequest(BaseModel):
 class CleanupOrphansRequest(BaseModel):
     filenames: List[str]
     confirm: bool = False
+
+
+class ExtractAudioRequest(BaseModel):
+    video_file: str
+    normalize_loudness: bool = False
+    canvas_id: str = ""
+    session_id: str = ""
 
 
 @router.get("/upscale_jobs")
@@ -153,4 +162,47 @@ async def post_cleanup_orphans_endpoint(req: CleanupOrphansRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         _logger.error("清理孤立文件失败: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/extract_audio")
+async def post_extract_audio_endpoint(req: ExtractAudioRequest):
+    """从指定视频剥离 48kHz 立体声 MP3 音频卡片并可选写入画布（P6-2）。"""
+    try:
+        return await extract_audio_from_video(
+            req.video_file,
+            normalize_loudness=req.normalize_loudness,
+            canvas_id=req.canvas_id,
+            session_id=req.session_id,
+        )
+    except PathSecurityError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        _logger.error("视频音轨剥离失败: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/export_bundle/{canvas_id}")
+async def get_export_project_bundle_endpoint(
+    canvas_id: str,
+    include_media: bool = True,
+):
+    """将指定画布的制片单、云盘路径映射、字幕草稿与媒体文件打包为单个 ZIP 归档下载（P6-4）。"""
+    try:
+        bundle = await build_canvas_project_bundle_zip(
+            canvas_id, include_media=include_media
+        )
+        return Response(
+            content=bundle["zip_bytes"],
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{bundle["filename"]}"'
+            },
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        _logger.error("导出制片工程包失败: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
