@@ -20,6 +20,7 @@ from tools.long_video_tools import (
     video_upscale_chunked_tool,
 )
 from tools.video_edit_tools import video_edit_and_stitch_tool
+from tools.visual_mask_tools import prepare_visual_mask_guide_tool
 from tools.write_plan import write_plan_tool
 from services.comfy_instance_service import comfy_instance_service
 from services.config_service import config_service
@@ -85,6 +86,13 @@ class ToolService:
                 "display_name": "FFmpeg 视频立体声音轨剥离",
                 "type": "audio",
                 "capability": "tts",
+            }
+            self.tools["prepare_visual_mask_guide"] = {
+                "provider": "system",
+                "tool_function": prepare_visual_mask_guide_tool,
+                "display_name": "局部重绘涂抹遮罩转视觉高亮引导图",
+                "type": "image",
+                "capability": "inpaint",
             }
         except ImportError as e:
             _logger.info(f"❌ 注册必须工具失败: {e}")

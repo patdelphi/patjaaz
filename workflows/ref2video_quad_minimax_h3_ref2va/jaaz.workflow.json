@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "name": "ref2video_quad_minimax_h3_ref2va",
+  "display_name": "MiniMax H3 Ref2VA 四元素参考生视频",
+  "capability": "i2v",
+  "output_kind": "video",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 面向双角色对手戏的 MiniMax H3 Ref2VA 四元素参考生视频工作流，按固定槽位传入 人物 A（`<Picture 1>`）+ 人物 B（`<Picture 2>`）+ 场景（`<Picture 3>`）+ 关键道具（`<Picture 4>`），生成 24fps 有声电影镜头。\n\n**必填参数：**\n- character_a_image：主角 A 参考图（`<Picture 1>`）。\n- positive_prompt：动作、运镜与对白音效描述，使用 `<Picture 1>`~`<Picture 4>` 明确指代。\n\n**可选参数：**\n- character_b_image（`<Picture 2>`）、scene_image（`<Picture 3>`）、prop_image（`<Picture 4>`）：留空自动裁剪。\n- aspect_ratio、megapixels（默认 0.98；>=12s 建议 0.45）、duration_seconds（默认 5.0）、enable_lightning_lora（默认 false）。",
+  "inputs": [
+    {
+      "name": "character_a_image",
+      "type": "image",
+      "required": true,
+      "node_id": "137",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。人物 A 参考图文件名（`<Picture 1>`）。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "138",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。分镜动作与音效描述，请用 `<Picture 1>`~`<Picture 4>` 指代人物 A、人物 B、场景与道具。"
+    },
+    {
+      "name": "character_b_image",
+      "type": "image",
+      "required": false,
+      "node_id": "139",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。人物 B 参考图文件名（`<Picture 2>`）；不用请留空。"
+    },
+    {
+      "name": "scene_image",
+      "type": "image",
+      "required": false,
+      "node_id": "147",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。环境场景参考图文件名（`<Picture 3>`）；不用请留空。"
+    },
+    {
+      "name": "prop_image",
+      "type": "image",
+      "required": false,
+      "node_id": "148",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。关键道具参考图文件名（`<Picture 4>`）；不用请留空。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "aspect_ratio",
+      "default_value": "16:9 (Widescreen)",
+      "description": "可选。输出画幅比例完整枚举字符串。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "megapixels",
+      "default_value": 0.98,
+      "description": "可选。像素档位（MP），默认 0.98。"
+    },
+    {
+      "name": "duration_seconds",
+      "type": "number",
+      "required": false,
+      "node_id": "132",
+      "node_input_name": "value",
+      "default_value": 5.0,
+      "description": "可选。视频时长（秒），默认 5.0（支持 5.0–15.0）。"
+    },
+    {
+      "name": "enable_lightning_lora",
+      "type": "boolean",
+      "required": false,
+      "node_id": "146",
+      "node_input_name": "value",
+      "default_value": false,
+      "description": "可选。默认 false 走 20 步高保真采样。"
+    }
+  ],
+  "outputs": [
+    {
+      "node_id": "92"
+    }
+  ],
+  "source_file": "四元素参考生视频_MiniMax-H3-Ref2VA.json",
+  "source_sha256": "e653ee936a197bebc3cc92227247f96c92598db57eee0d11a8cc8119c29f1487"
+}

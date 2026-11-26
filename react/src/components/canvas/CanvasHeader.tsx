@@ -1,8 +1,12 @@
 import { Input } from '@/components/ui/input'
-import CanvasExport from './CanvasExport'
-import CanvasLayersAndSnapshotsDrawer from './CanvasLayersAndSnapshotsDrawer'
-import CanvasStudioDrawer from './CanvasStudioDrawer'
+import React, { lazy, Suspense } from 'react'
 import TopMenu from '../TopMenu'
+
+const CanvasStudioDrawer = lazy(() => import('./CanvasStudioDrawer'))
+const CanvasLayersAndSnapshotsDrawer = lazy(
+  () => import('./CanvasLayersAndSnapshotsDrawer')
+)
+const CanvasExport = lazy(() => import('./CanvasExport'))
 
 type CanvasHeaderProps = {
   canvasName: string
@@ -29,9 +33,11 @@ const CanvasHeader: React.FC<CanvasHeaderProps> = ({
       }
       right={
         <div className="flex items-center gap-2">
-          <CanvasStudioDrawer canvasId={canvasId} />
-          <CanvasLayersAndSnapshotsDrawer canvasId={canvasId} />
-          <CanvasExport />
+          <Suspense fallback={null}>
+            <CanvasStudioDrawer canvasId={canvasId} />
+            <CanvasLayersAndSnapshotsDrawer canvasId={canvasId} />
+            <CanvasExport />
+          </Suspense>
         </div>
       }
     />

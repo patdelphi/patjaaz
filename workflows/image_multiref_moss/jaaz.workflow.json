@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "name": "image_multiref_moss",
+  "display_name": "MOSS-Image 多图参考生图",
+  "capability": "i2i",
+  "output_kind": "image",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 传入 1–4 张参考图由 Qwen3.5 视觉解析主体/服饰/画风并驱动 MOSS-Image 生成新画面，适合轻量级多图风格迁移与角色复现。\n\n**必填参数：**\n- reference_image_1：第 1 张参考图文件名。\n- positive_prompt：目标画面描述。\n\n**可选参数：**\n- reference_image_2 ~ reference_image_4：可选第 2–4 张参考图（按顺序连续填写，留空自动裁剪）。\n- aspect_ratio：完整画幅枚举值，默认 \"16:9 (Widescreen)\"。\n- megapixels：默认 2.0。",
+  "inputs": [
+    {
+      "name": "reference_image_1",
+      "type": "image",
+      "required": true,
+      "node_id": "28",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。第 1 张参考图文件名。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "18:17",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。目标新画面的主体、动作、场景或风格迁移描述。"
+    },
+    {
+      "name": "reference_image_2",
+      "type": "image",
+      "required": false,
+      "node_id": "29",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 2 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "reference_image_3",
+      "type": "image",
+      "required": false,
+      "node_id": "30",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 3 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "reference_image_4",
+      "type": "image",
+      "required": false,
+      "node_id": "31",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 4 张参考图文件名；不用请留空。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "19",
+      "node_input_name": "aspect_ratio",
+      "default_value": "16:9 (Widescreen)",
+      "description": "可选。输出画幅比例完整枚举值。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "19",
+      "node_input_name": "megapixels",
+      "default_value": 2.0,
+      "description": "可选。像素档位（MP），默认 2.0。"
+    }
+  ],
+  "outputs": [
+    {
+      "node_id": "9"
+    }
+  ],
+  "source_file": "多图参考文生图_MOSS-Image.json",
+  "source_sha256": "261c3e79fc61301bb13394702ff164a52f8741903b7529c8234cdfb86d35a207"
+}

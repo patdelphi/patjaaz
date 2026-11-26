@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "name": "text2image_MOSS",
+  "display_name": "MOSS-Image 文生图",
+  "capability": "t2i",
+  "output_kind": "image",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用轻量 MOSS-Image 5B 模型根据文本生成图像，擅长中英双语海报排版、插画与概念设计。\n\n**必填参数：**\n- positive_prompt：画面主体、构图、色彩与引号内双语文字描述。\n\n**可选参数：**\n- aspect_ratio：完整画幅枚举字符串，默认 \"16:9 (Widescreen)\"。\n- megapixels：像素档，默认 2.0（推荐 1.0–2.0）。\n- enable_prompt_enhancer：是否启用内置 Qwen3.5 提示词扩写，默认 true。",
+  "inputs": [
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "18:17",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。详细描述画面主体、光影与版式，需渲染的文字请用双引号括起。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "19",
+      "node_input_name": "aspect_ratio",
+      "default_value": "16:9 (Widescreen)",
+      "description": "可选。输出画幅比例，必须原样传 Allowed options 中的完整字符串。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "19",
+      "node_input_name": "megapixels",
+      "default_value": 2.0,
+      "description": "可选。像素档位（MP），默认 2.0。"
+    },
+    {
+      "name": "enable_prompt_enhancer",
+      "type": "boolean",
+      "required": false,
+      "node_id": "18:16",
+      "node_input_name": "switch",
+      "default_value": true,
+      "description": "可选。是否启用内置 Qwen3.5 扩写，默认 true。"
+    }
+  ],
+  "outputs": [
+    {
+      "node_id": "9"
+    }
+  ],
+  "source_file": "文生图_MOSS-Image.json",
+  "source_sha256": "05da201cdc101ccd8518b455644ed6554d138ad4d4f5b67aa879407ce041cd83"
+}

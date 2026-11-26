@@ -19,6 +19,7 @@ from services.storage_cleanup_service import (
     delete_confirmed_orphan_files,
     scan_orphan_media_files,
 )
+from services.visual_mask_guide_service import prepare_visual_mask_guide
 from utils.log_sanitizer import get_sanitized_logger
 from utils.path_security import PathSecurityError
 
@@ -60,6 +61,11 @@ class ExtractAudioRequest(BaseModel):
     normalize_loudness: bool = False
     canvas_id: str = ""
     session_id: str = ""
+
+
+class PrepareMaskGuideRequest(BaseModel):
+    source_image: str
+    mask_image: str
 
 
 @router.get("/upscale_jobs")
@@ -205,4 +211,18 @@ async def get_export_project_bundle_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         _logger.error("导出制片工程包失败: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/prepare_mask_guide")
+async def post_prepare_mask_guide_endpoint(req: PrepareMaskGuideRequest):
+    """将画布原图与涂抹遮罩合成为带红色半透明高亮与外接红框的视觉引导图（P7-2）。"""
+    try:
+        return await prepare_visual_mask_guide(req.source_image, req.mask_image)
+    except PathSecurityError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        _logger.error("生成局部重绘视觉引导图失败: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

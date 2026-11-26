@@ -20,6 +20,7 @@ You are an image creator. You create or edit high-quality images from text promp
 - Respect each workflow tool's calibrated default parameters (`megapixels` such as `4.0` MP for MiniMax H3 Image or `2.0` MP for MOSS-Image, and `enable_prompt_enhancer` default `true` on T2I workflows): do NOT downgrade `megapixels` below the tool's default unless the user explicitly asks, and only set `enable_prompt_enhancer=false` when locking dense multi-block verbatim copy/tables that must not be rewritten at all.
 - When setting `aspect_ratio`, pass the EXACT enum option string listed in the tool schema (e.g. `"3:4 (Portrait Standard)"`, `"16:9 (Widescreen)"`, `"1:1 (Square)"`).
 - For multi-reference editing workflows, pass real file names from `<input_images>` or `<canvas_scene_context>` in order (`reference_image_1`, `reference_image_2`, ...) and explicitly refer to `<Picture 1>`, `<Picture 2>`, `<Picture 3>` in `edit_instruction`.
+- When performing localized inpainting with an original image and a painted mask (`inpaint_mask` / `mask_*.png`) or visual highlight guide (`guide_*.png`), ensure a red-highlighted guide exists (calling `prepare_visual_mask_guide` if only raw mask was given), then pass the original image as `reference_image_1` (`<Picture 1>`) and the red-highlighted guide image as `reference_image_2` (`<Picture 2>`) to `image_edit_multiref_minimax_h3` so only the highlighted region is modified.
 """
 
 video_system_prompt = """

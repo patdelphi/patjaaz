@@ -1,7 +1,7 @@
 ﻿# Jaaz ComfyUI 工作流完整使用说明
 
-> 更新日期：2026-11-25
-> 适用范围：项目 `workflows/` 目录下 12 套成对工作流包 + 数据库内 2 套历史 MOSS 工作流（共 14 套）
+> 更新日期：2026-11-26
+> 适用范围：项目 `workflows/` 目录下全部 17 套标准化成对工作流包（含 SenseNova U1.6、MiniMax H3 全系、MOSS-Image 全系与 SeedVR2 超分）
 
 ---
 
@@ -13,18 +13,21 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 文生图 | `text2image_sensenova_u16` | SenseNova U1.6 文生图 | **已启用** | 中英双语海报、信息图、卡片排版、高美感商业摄影与人像（支持文字自检循环） |
 | 文生图 | `text2image_minimax_h3` | MiniMax H3 文生图 | **已启用** | 电影感纪实人像、自然风光、微距静物、复杂空间构图生成 |
-| 文生图 | `text2image_MOSS` | MOSS-Image 文生图 | 已停用 | 轻量 5B 模型双语文字排版与二次元/插画生成（仅存数据库） |
+| 文生图 | `text2image_MOSS` | MOSS-Image 文生图 | 已停用 | 轻量 5B 模型双语文字排版与二次元/插画生成（已纳入 `workflows/`） |
 | 图像编辑 | `image_edit_sensenova_u16` | SenseNova U1.6 图像编辑 | **已启用** | **单底图编辑首选**：增删改局部物体、改服装光影、精准替换画面内中英文文案（自动保持原图比例） |
-| 图像编辑 | `image_edit_multiref_minimax_h3` | MiniMax H3 多参考图编辑 | **已启用** | **多图融合编辑首选**：以底图 `<Picture 1>` 为主，融合 `<Picture 2>`/`<Picture 3>` 的人物、道具或画风 |
-| 图像编辑 | `ImageEdit_MOSS` | MOSS-Image 图像编辑 | 已停用 | 1.0 MP 轻量单图局部换色、换材质编辑（仅存数据库） |
+| 图像编辑 | `image_edit_multiref_minimax_h3` | MiniMax H3 多参考图编辑 | **已启用** | **多图融合与遮罩引导编辑首选**：以底图 `<Picture 1>` 为主，融合 `<Picture 2>`/`<Picture 3>` 或红色高亮引导区 |
+| 图像编辑 | `ImageEdit_MOSS` | MOSS-Image 图像编辑 | 已停用 | 1.0 MP 轻量单图局部换色、换材质编辑（已纳入 `workflows/`） |
+| 图像编辑 | `image_multiref_moss` | MOSS-Image 多图参考生图 | 已停用 | 1–4 张参考图经 Qwen3.5 视觉提取驱动 MOSS-Image 轻量风格迁移与主体复现 |
 | 文生视频 | `text2video_minimax_h3` | MiniMax H3 文生视频 | **已启用** | 无参考图，纯文字分镜脚本直接生成 24fps 视频 + 原生同步立体声音轨 |
 | 图生视频 | `image2video_first_frame_minimax_h3` | MiniMax H3 单图首帧生视频 | **已启用** | 指定起始第 1 帧图片，延续生成后续动作、运镜与立体声效 |
 | 图生视频 | `image2video_first_last_frame_minimax_h3` | MiniMax H3 双图首尾帧生视频 | 已停用 | 同时指定开场首帧与结束尾帧，生成两帧之间的平滑过渡视频 |
 | 参考生视频 | `ref2video_dual_minimax_h3_fl2va_turbo` | MiniMax H3 FL2VA 双图参考生视频 (Turbo) | **已启用** | 用 2 张参考图（如人物 + 道具/坐骑/场景）快速合成全新分镜动作视频（8 步 Turbo） |
+| 参考生视频 | `ref2video_dual_minimax_h3_r2v` | MiniMax H3 R2V 双图参考生视频 (8步Turbo) | 已停用 | 基于原生 `MiniMaxH3ReferenceToVideo` + 8 步 Turbo LoRA 的 1–2 图快速参考生视频 |
 | 参考生视频 | `ref2video_minimax_h3_ref2va` | MiniMax H3 Ref2VA 参考生视频 | 已停用 | 1–4 张参考图（人物 A/B + 场景 + 道具）20 步高保真角色一致性视频 |
+| 参考生视频 | `ref2video_quad_minimax_h3_ref2va` | MiniMax H3 Ref2VA 四元素参考生视频 | 已停用 | 专用四槽位（人物 A + 人物 B + 场景 + 道具）双人对手戏 20 步高保真生视频 |
 | 参考生视频 | `ref2video_multimodal_minimax_h3_rf` | MiniMax H3 多图音频参考生视频 (RF加速) | 已停用 | 1–5 张参考图 + 0–3 段参考音频（人声/台词/音乐节奏）联合引导生视频 |
 | 参考生视频 | `ref2video_multiref_minimax_h3_rh` | MiniMax H3 开源版双图参考生视频 (RH) | 已停用 | 依赖 `ComfyUI-RH-MiniMax-H3` 插件与独立模型目录，当前实例未装对应目录 |
-| 视频超分 | `video_upscale_seedvr2_3b` | SeedVR2 3B 视频超分 | 已停用 | 对已有低清/768p 视频做 2 倍超分辨率放大与细节修复，保留原帧率与音轨 |
+| 视频超分 | `video_upscale_seedvr2_3b` | SeedVR2 3B 视频超分 | 已停用 | 单段超分底座（长视频请优先使用内置分块断点超分工具 `video_upscale_chunked`） |
 
 ---
 
@@ -231,6 +234,11 @@ SenseNova U1.6 独有「生成 → 视觉自检核对文字/编号 → 重绘修
 - **目录**：`workflows/ref2video_multiref_minimax_h3_rh/`
 - **依赖限制**：依赖 `ComfyUI-RH-MiniMax-H3` 自定义节点及 `models/MiniMax-H3/` 独立权重目录（当前云端硬盘未装该目录，保持停用）。
 - **参数配置**：`reference_image_1`（必填）、`reference_image_2`（必填）、`positive_prompt`（必填）、`aspect_ratio`（短比例枚举如 `"9:16"`、`"16:9"`，勿带括号后缀）、`duration_seconds`（默认 `8`）、`width`（默认 `736`）、`height`（默认 `1024`）。
+
+#### （13b）`image_multiref_moss` / `ref2video_quad_minimax_h3_ref2va` / `ref2video_dual_minimax_h3_r2v`（阶段 P7 新增入库）
+- **`image_multiref_moss`**（`workflows/image_multiref_moss/`）：支持 `reference_image_1`~`reference_image_4` 经 Qwen3.5 视觉解析驱动 MOSS-Image 5B 生成 `2.0 MP` 新图。
+- **`ref2video_quad_minimax_h3_ref2va`**（`workflows/ref2video_quad_minimax_h3_ref2va/`）：具名四元素槽位 `character_a_image`（`<Picture 1>`）、`character_b_image`（`<Picture 2>`）、`scene_image`（`<Picture 3>`）、`prop_image`（`<Picture 4>`），调度器已校准为 `normal` 并经过 LoRA Switch。
+- **`ref2video_dual_minimax_h3_r2v`**（`workflows/ref2video_dual_minimax_h3_r2v/`）：已修复原草稿中悬空的 `prompt`/`width`/`height`/`length` 连线并补齐 `reference_image_2` 槽位与 8 步 Turbo LoRA 步数。
 
 ---
 

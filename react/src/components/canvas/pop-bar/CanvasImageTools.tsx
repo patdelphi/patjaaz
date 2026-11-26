@@ -236,6 +236,27 @@ export const CanvasImageTools: React.FC<CanvasImageToolsProps> = ({
 
       const origFileId =
         extractApiFilename(String(primaryUrl)) || selectedImagesForChat[0]?.fileId || ''
+      let secondRefId = uploaded.file_id
+      let regionHint = '涂抹区域'
+      if (origFileId) {
+        const guideResp = await apiFetch('/api/studio/prepare_mask_guide', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_image: origFileId,
+            mask_image: uploaded.file_id,
+          }),
+        })
+        if (guideResp.ok) {
+          const gData = (await guideResp.json()) as {
+            guide_file_id: string
+            region_label: string
+          }
+          secondRefId = gData.guide_file_id
+          regionHint = gData.region_label || regionHint
+        }
+      }
+
       const chatImgs: TCanvasAddImagesToChatEvent = [
         ...(origFileId
           ? [
@@ -247,19 +268,20 @@ export const CanvasImageTools: React.FC<CanvasImageToolsProps> = ({
             ]
           : []),
         {
-          fileId: uploaded.file_id,
+          fileId: secondRefId,
           width: uploaded.width,
           height: uploaded.height,
         },
       ]
       eventBus.emit('Canvas::AddImagesToChat', chatImgs)
-      const finalInstruction =
-        inpaintPrompt.trim() ||
-        `请基于原图 (${origFileId}) 与涂抹遮罩图 (${uploaded.file_id}) 对透明遮罩区域进行局部重绘修改：`
+      const userGoal = inpaintPrompt.trim() || '（请在此补充替换内容）'
+      const finalInstruction = origFileId
+        ? `请参考原图 <Picture 1> (${origFileId}) 与红色高亮选区引导图 <Picture 2> (${secondRefId}，位于${regionHint})，仅将 <Picture 2> 红色框定区域修改为：${userGoal}；其余人物、服饰与背景严格保持 <Picture 1> 不变。`
+        : userGoal
       eventBus.emit('Canvas::AddTextToChat', [finalInstruction])
 
       maskDialogRef.current?.close()
-      toast.success('已生成透明通道遮罩并带入对话')
+      toast.success('已合成局部重绘视觉引导图并带入对话')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '导出遮罩失败')
     } finally {

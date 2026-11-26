@@ -9,9 +9,10 @@ import { eventBus } from '@/lib/event'
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import type { OrderedExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { BinaryFileData } from '@excalidraw/excalidraw/types'
-import { Archive, Clapperboard, FolderSearch, Grid2X2, LayoutTemplate, Plus, Search } from 'lucide-react'
+import { Archive, FolderSearch, Grid2X2, LayoutTemplate, Plus, Search } from 'lucide-react'
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import StudioDirectorTimeline from './StudioDirectorTimeline'
 import StudioMappingsAndCleanupTab from './StudioMappingsAndCleanupTab'
 
 type StudioAsset = {
@@ -63,13 +64,6 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
   const [batchPromptTpl, setBatchPromptTpl] = useState(
     '请生成一张 16:9 电影级特写画面：{主体}置于{场景}之中，{光影}，无任何文字水印。'
   )
-  const [selectedComposeVideos, setSelectedComposeVideos] = useState<string[]>([])
-  const [composeTrimSec, setComposeTrimSec] = useState<string>('')
-  const [composeFadeSec, setComposeFadeSec] = useState<string>('0.2')
-  const [composeLoudnorm, setComposeLoudnorm] = useState<boolean>(true)
-  const [composeOutroSec, setComposeOutroSec] = useState<string>('0.6')
-  const [composeIntroTitle, setComposeIntroTitle] = useState<string>('')
-  const [composeBusy, setComposeBusy] = useState(false)
   const [bundleBusy, setBundleBusy] = useState(false)
 
   const fetchAssets = async (q = query, kind = kindFilter) => {
@@ -316,49 +310,6 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
     }
     return out
   })()
-
-  const handleComposeSelectedVideos = async () => {
-    if (selectedComposeVideos.length === 0) {
-      toast.info('请先勾选至少 1 段画布视频')
-      return
-    }
-    setComposeBusy(true)
-    try {
-      const trimVal = Number(composeTrimSec)
-      const fadeVal = Number(composeFadeSec)
-      const outroVal = Number(composeOutroSec)
-      const resp = await apiFetch('/api/studio/compose_video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          video_files: selectedComposeVideos,
-          target_clip_duration:
-            Number.isFinite(trimVal) && trimVal > 0 ? trimVal : null,
-          transition_fade_sec:
-            Number.isFinite(fadeVal) && fadeVal >= 0 ? fadeVal : 0.2,
-          preserve_clip_audio: true,
-          normalize_audio_loudness: composeLoudnorm,
-          intro_title: composeIntroTitle.trim() || null,
-          fade_out_outro_sec:
-            Number.isFinite(outroVal) && outroVal >= 0 ? outroVal : 0,
-          canvas_id: canvasId,
-        }),
-      })
-      const body = await resp.json()
-      if (!resp.ok) {
-        throw new Error(body?.detail || `HTTP ${resp.status}`)
-      }
-      eventBus.emit('Canvas::SyncGeneratedImages', { canvasId })
-      toast.success(
-        `剪辑拼接完成：${body.file_id}（${body.duration_sec || ''}s）`
-      )
-      dialogRef.current?.close()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '视频合片失败')
-    } finally {
-      setComposeBusy(false)
-    }
-  }
 
   const handleExportProjectBundle = async () => {
     setBundleBusy(true)
@@ -671,107 +622,11 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                 </Button>
               </div>
 
-              <div className="space-y-2 rounded-lg border p-3">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  <Clapperboard className="size-4 text-purple-600" />
-                  <span>ffmpeg 多段分镜视频拼接合片</span>
-                </div>
-                <p className="text-muted-foreground">
-                  勾选当前画布上的分镜视频，按勾选顺序由后端 ffmpeg 统一尺寸拼接为完整短片：
-                </p>
-                <div className="max-h-36 space-y-1 overflow-y-auto rounded border p-2">
-                  {canvasVideos.length === 0 ? (
-                    <span className="text-muted-foreground">当前画布暂无视频元素</span>
-                  ) : (
-                    canvasVideos.map((vf) => {
-                      const checked = selectedComposeVideos.includes(vf)
-                      return (
-                        <label key={vf} className="flex items-center gap-2 cursor-pointer py-0.5">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              setSelectedComposeVideos((prev) =>
-                                e.target.checked
-                                  ? [...prev, vf]
-                                  : prev.filter((item) => item !== vf)
-                              )
-                            }}
-                          />
-                          <span className="truncate">{vf}</span>
-                        </label>
-                      )
-                    })
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <label className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">单段截齐秒数（可空）</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.5"
-                      value={composeTrimSec}
-                      onChange={(e) => setComposeTrimSec(e.target.value)}
-                      placeholder="如 15.0"
-                      className="h-7 w-full rounded border bg-background px-2"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">衔接淡入淡出（秒）</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      value={composeFadeSec}
-                      onChange={(e) => setComposeFadeSec(e.target.value)}
-                      className="h-7 w-full rounded border bg-background px-2"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">片头标题渐显（可空）</span>
-                    <input
-                      type="text"
-                      value={composeIntroTitle}
-                      onChange={(e) => setComposeIntroTitle(e.target.value)}
-                      placeholder="如 江南夜雨"
-                      className="h-7 w-full rounded border bg-background px-2"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">片尾黑场淡出（秒）</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="5"
-                      step="0.2"
-                      value={composeOutroSec}
-                      onChange={(e) => setComposeOutroSec(e.target.value)}
-                      className="h-7 w-full rounded border bg-background px-2"
-                    />
-                  </label>
-                </div>
-                <label className="flex items-center gap-2 pt-0.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={composeLoudnorm}
-                    onChange={(e) => setComposeLoudnorm(e.target.checked)}
-                  />
-                  <span className="text-[11px] text-muted-foreground">
-                    启用 EBU R128 响度自动均衡（消除多段音量跳跃）
-                  </span>
-                </label>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={composeBusy || canvasVideos.length === 0}
-                  className="w-full h-8 text-xs"
-                  onClick={() => void handleComposeSelectedVideos()}
-                >
-                  {composeBusy ? 'ffmpeg 精装合片中…' : `自动剪辑精装拼接 (${selectedComposeVideos.length})`}
-                </Button>
-              </div>
+              <StudioDirectorTimeline
+                canvasId={canvasId}
+                canvasVideos={canvasVideos}
+                onDone={() => dialogRef.current?.close()}
+              />
             </div>
           </div>
 

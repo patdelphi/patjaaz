@@ -99,6 +99,7 @@ class AgentManager:
                 'video_upscale_chunked',
                 'synthesize_speech_narration',
                 'extract_video_audio',
+                'prepare_visual_mask_guide',
             ):
                 if media_sys_tid not in seen_tool_ids:
                     media_sys_tool = tool_service.get_tool(media_sys_tid)

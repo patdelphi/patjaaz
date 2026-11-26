@@ -1,8 +1,11 @@
 ﻿# Jaaz 变更记录（Changelog）
 
-## 2026-11-26 — 阶段 P5–P6 长片生产闭环、异构 GPU 分流、全链路配音与工程归档
+## 2026-11-26 — 阶段 P5–P7 长片闭环、异构分流、17 套工作流全量纳管、遮罩引导重绘与导演时间轴
 
 ### 新增（Added）
+- **云盘剩余 5 套工作流校准入库（P7-1）**：将 `text2image_MOSS`、`ImageEdit_MOSS`、`image_multiref_moss`、`ref2video_quad_minimax_h3_ref2va`、`ref2video_dual_minimax_h3_r2v` 校准连线与步数后标准化写入 `workflows/`（全仓库共 17 套成对工作流包），同步更新 `Docs/12-ComfyUI工作流完整使用说明.md`。
+- **画布涂抹遮罩视觉引导重绘闭环（P7-2）**：新增 `visual_mask_guide_service.py`、`prepare_visual_mask_guide` 系统工具与 `POST /api/studio/prepare_mask_guide`，前端画笔涂抹提交时自动叠绘半透明红框引导图（`<Picture 2>`）配合原图（`<Picture 1>`）对接无遮罩槽大模型精准局部重绘。
+- **导演分镜时间轴与前端按需懒加载（P7-3 / P7-4）**：新增 `StudioDirectorTimeline.tsx` 支持镜头上下排序、单镜起止秒裁剪、逐镜台词自动换算硬烧录时间轴、一键抽尾帧接力与分块超分；对 `CanvasExcali`、工作台抽屉与仅开发环境加载的 `RouterDevtools` 实施 `React.lazy` 拆分并细化 `manualChunks`。
 - **异构双实例自动分流调度（P6-3）**：升级 `comfy_instance_service.resolve_instance`，同时配置多台实例时，重型 `NVFP4` 工作流（`MiniMax H3` / `SenseNova`）自动避开 `SM < 8.0` 或 `<16 GiB` 显存节点路由至 L4/A100 实例，`SeedVR2` 超分优先分流至在线次级 T4 或 `upscale` 节点并行执行。
 - **多源旁白语音合成与视频音轨剥离（P6-2）**：新增 `local_audio_service.py` 与系统工具 `synthesize_speech_narration`、`extract_video_audio`，打通 OpenAI `/audio/speech`、阿里云百炼原生 `qwen-tts` 及 Windows 离线中文语音 + 内置 `ffmpeg` 响度均衡兜底，支持一键剥离视频音轨卡片。
 - **短片制片工程包一键归档导出（P6-4）**：新增 `project_bundle_service.py` 与 `GET /api/studio/export_bundle/{canvas_id}`，将画布 `canvas.json`、UTF-8 BOM+CRLF 制片血缘单、云盘映射 CSV、SRT 字幕草稿与关联媒体打包为 `.zip` 供工作台一键下载；同步补齐 `Docs/09-api.md` 全量接口表。

@@ -86,8 +86,14 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined
-            if (id.includes('mermaid') || id.includes('cytoscape') || id.includes('dagre') || id.includes('d3-')) {
+            if (id.includes('mermaid') || id.includes('cytoscape') || id.includes('dagre') || id.includes('d3-') || id.includes('elkjs') || id.includes('khroma')) {
               return 'diagram-vendor'
+            }
+            if (id.includes('katex')) {
+              return 'math-vendor'
+            }
+            if (id.includes('react-markdown') || id.includes('remark-') || id.includes('rehype-') || id.includes('micromark') || id.includes('mdast-')) {
+              return 'markdown-vendor'
             }
             if (id.includes('@excalidraw')) {
               return 'excalidraw-vendor'

@@ -55,6 +55,7 @@
 | `POST` | `/api/studio/tts` | 多源语音合成（OpenAI / DashScope `qwen-tts` / 本机离线中文语音兜底）并写入画布音频卡 |
 | `POST` | `/api/studio/extract_audio` | 从指定视频剥离 48kHz 立体声 MP3 音频卡片并写入画布 |
 | `POST` | `/api/studio/extract_frame` | 提取视频首帧、尾帧或指定秒数关键帧 PNG 并写入画布血缘供长片接力 |
+| `POST` | `/api/studio/prepare_mask_guide` | 将画布原图与涂抹遮罩合成为带红色半透明选区与外接红框的视觉引导图（`<Picture 2>`） |
 | `GET` | `/api/studio/upscale_jobs` | 查询全部分块 `SeedVR2` 超分任务的进度与断点快照 |
 | `POST` | `/api/studio/upscale_chunked` | 按远端内存自动计算安全切片秒数启动或断点续跑长视频超分并无损合流音轨 |
 | `POST` | `/api/studio/hot_resume_colab` | 事务热更新 Colab 隧道地址、清空过期上传缓存、探测硬件并返回待续跑队列 |

@@ -429,3 +429,14 @@
 2. [x] **P6-2 多源配音合成（DashScope/OpenAI/离线本机语音兜底）与视频音轨提取工具**：新增 `local_audio_service.py` 与系统工具 `synthesize_speech_narration` / `extract_video_audio`，打通云端与零外部依赖本机中文 TTS 兜底及视频原生音轨剥离入画。
 3. [x] **P6-3 异构双实例自动分流调度（L4/A100 出片 + T4 超分）**：升级 `comfy_instance_service.resolve_instance`，重型 `NVFP4` 工作流自动避开 `SM < 8.0` / 低显存实例路由至 Ampere+ 实例，`SeedVR2` 超分优先分流至次级 T4 或 `upscale` 实例并行执行。
 4. [x] **P6-4 短片制片工程包一键归档导出（Project Bundle ZIP）与 API 文档补齐**：新增 `project_bundle_service.py` 与 `/api/studio/export_bundle/{canvas_id}`（含 `canvas.json`、`production_sheet.md`、`file_mappings.csv`、`subtitles.srt` 及可选媒体资产）并在工作台提供一键下载，同步更新 `Docs/09-api.md` 与 `Docs/11-changelog.md`。
+
+---
+
+## 阶段 P7：云盘剩余工作流全量纳管、涂抹遮罩重绘闭环与导演时间轴（2026-11-26 已完成）
+
+### 范围与阶段
+0. [x] **前置收口**：提交阶段 P6（`858e363`），并通过在线清理接口删除已确认的 6 个 `src_slice_60s_part01~06.mp4` 临时切片文件（释放 `19.63 MB`）。
+1. [x] **P7-1 云盘 `导出API` 剩余 5 套工作流全量标准化入库**：校准节点连线与采样步数，将 `text2image_MOSS`、`ImageEdit_MOSS`、`image_multiref_moss`、`ref2video_quad_minimax_h3_ref2va`、`ref2video_dual_minimax_h3_r2v` 纳入 `workflows/`（共 17 套成对工作流包）并同步更新 `Docs/12`。
+2. [x] **P7-2 画布涂抹遮罩视觉引导重绘闭环**：新增 `visual_mask_guide_service.py`、`prepare_visual_mask_guide` 工具与 `/api/studio/prepare_mask_guide`，前端涂抹遮罩自动合成半透明红框引导图（`<Picture 2>`）对接 `SenseNova U1.6` / `MiniMax H3` 局部修改。
+3. [x] **P7-3 工作台「导演分镜时间轴」可视化编排面板**：新增 `StudioDirectorTimeline.tsx`，支持镜头上下调序、单镜起止秒裁剪、逐镜台词字幕自动换算烧录时间轴、单镜一键抽尾帧接力与一键分块超分。
+4. [x] **P7-4 前端路由与重型依赖按需懒加载减重**：按需懒加载 `CanvasExcali`、工作台抽屉与仅开发环境加载的 `RouterDevtools`，拆分 `markdown-vendor` 与 `math-vendor`。

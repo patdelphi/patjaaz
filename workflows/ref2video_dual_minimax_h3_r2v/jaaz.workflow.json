@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "name": "ref2video_dual_minimax_h3_r2v",
+  "display_name": "MiniMax H3 R2V 双图参考生视频 (8步Turbo)",
+  "capability": "i2v",
+  "output_kind": "video",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 基于 MiniMaxH3ReferenceToVideo 原生参考节点 + FL2VA 8步 Turbo LoRA 的双图参考生视频工作流，支持 1–2 张参考图（`<Picture 1>`、`<Picture 2>`）快速生成 24fps 同步立体声视频。\n\n**必填参数：**\n- reference_image_1：第 1 张参考图文件名（`<Picture 1>`）。\n- positive_prompt：分镜动作、台词与环境音效描述，请用 `<Picture 1>`、`<Picture 2>` 指代参考图。\n\n**可选参数：**\n- reference_image_2：第 2 张参考图文件名（`<Picture 2>`，留空自动裁剪）。\n- aspect_ratio、megapixels（默认 0.98）、duration_seconds（默认 5.0）、enable_lightning_lora（默认 true，8 步加速）。",
+  "inputs": [
+    {
+      "name": "reference_image_1",
+      "type": "image",
+      "required": true,
+      "node_id": "137",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。第 1 张参考图文件名（`<Picture 1>`）。"
+    },
+    {
+      "name": "positive_prompt",
+      "type": "string",
+      "required": true,
+      "node_id": "138",
+      "node_input_name": "value",
+      "default_value": "",
+      "description": "必填。动作、台词与音效描述，请用 `<Picture 1>`、`<Picture 2>` 引用参考图。"
+    },
+    {
+      "name": "reference_image_2",
+      "type": "image",
+      "required": false,
+      "node_id": "139",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "可选。第 2 张参考图文件名（`<Picture 2>`）；不用请留空。"
+    },
+    {
+      "name": "aspect_ratio",
+      "type": "enum",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "aspect_ratio",
+      "default_value": "16:9 (Widescreen)",
+      "description": "可选。输出画幅比例完整枚举字符串。",
+      "options": [
+        "1:1 (Square)",
+        "2:3 (Portrait Photo)",
+        "3:2 (Photo)",
+        "3:4 (Portrait Standard)",
+        "4:3 (Standard)",
+        "9:16 (Portrait Widescreen)",
+        "16:9 (Widescreen)",
+        "21:9 (Ultrawide)"
+      ]
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "115",
+      "node_input_name": "megapixels",
+      "default_value": 0.98,
+      "description": "可选。像素档位（MP），默认 0.98。"
+    },
+    {
+      "name": "duration_seconds",
+      "type": "number",
+      "required": false,
+      "node_id": "132",
+      "node_input_name": "value",
+      "default_value": 5.0,
+      "description": "可选。视频时长（秒），默认 5.0（支持 5.0–15.0）。"
+    },
+    {
+      "name": "enable_lightning_lora",
+      "type": "boolean",
+      "required": false,
+      "node_id": "146",
+      "node_input_name": "value",
+      "default_value": true,
+      "description": "可选。默认 true 启用 8 步 Turbo LoRA 加速。"
+    }
+  ],
+  "outputs": [
+    {
+      "node_id": "92"
+    }
+  ],
+  "source_file": "双图参考生视频_MiniMax-H3-R2V.json",
+  "source_sha256": "bff8a3fee22ceb0497719fbb786c4aa293b667fcc22a51dea467ca2d56b0687d"
+}

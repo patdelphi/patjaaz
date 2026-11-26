@@ -21,10 +21,10 @@ class Batch1PipelineAndQualityTests(unittest.IsolatedAsyncioTestCase):
         repo_root = pathlib.Path(__file__).resolve().parents[2]
         wf_root = repo_root / "workflows"
 
-        # 全量校验 workflows/ 目录下全部 12 套工作流包无解析错误、无断连节点
+        # 全量校验 workflows/ 目录下全部 17 套工作流包无解析错误、无断连节点
         scan_res = scan_workflows_dir(str(wf_root))
         self.assertEqual(scan_res["errors"], [])
-        self.assertEqual(len(scan_res["valid"]), 12)
+        self.assertEqual(len(scan_res["valid"]), 17)
         for pack in scan_res["valid"]:
             issues = detect_api_json_issues(pack["api_json"])
             self.assertEqual(issues["missing_class_type_nodes"], [], pack["config_json"]["name"])

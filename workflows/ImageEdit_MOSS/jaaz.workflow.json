@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "ImageEdit_MOSS",
+  "display_name": "MOSS-Image 图像编辑",
+  "capability": "i2i",
+  "output_kind": "image",
+  "enabled": false,
+  "instance_id": "",
+  "seed_strategy": "random",
+  "description": "**描述：** 使用 MOSS-Image + Edit LoRA 对单张底图执行换色、换材质或局部元素修改，自动继承底图画幅比例。\n\n**必填参数：**\n- input_image：待修改的底图文件名。\n- edit_instruction：明确的修改指令，指出修改部位与保持不变的要素。\n\n**可选参数：**\n- megapixels：处理像素档，默认 1.0。",
+  "inputs": [
+    {
+      "name": "input_image",
+      "type": "image",
+      "required": true,
+      "node_id": "8",
+      "node_input_name": "image",
+      "default_value": "",
+      "description": "必填。待编辑的底图文件名。"
+    },
+    {
+      "name": "edit_instruction",
+      "type": "string",
+      "required": true,
+      "node_id": "39",
+      "node_input_name": "prompt",
+      "default_value": "",
+      "description": "必填。局部编辑指令，说明要修改什么、哪些人物与背景保持不变。"
+    },
+    {
+      "name": "megapixels",
+      "type": "number",
+      "required": false,
+      "node_id": "29",
+      "node_input_name": "megapixels",
+      "default_value": 1.0,
+      "description": "可选。输出像素档（MP），默认 1.0。"
+    }
+  ],
+  "outputs": [
+    {
+      "node_id": "9"
+    }
+  ],
+  "source_file": "图像编辑_MOSS-Image.json",
+  "source_sha256": "c280a4bca7e0b97d81e5628b30e8d36cb7c631a39491ba359c9ed4d1119d8586"
+}
