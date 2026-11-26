@@ -22,7 +22,12 @@ Jaaz 社区版是本地优先的 AIGC 无限画布创作工作台。系统不绑
 
 ### 2.3 多协议大模型与智能体协作
 - 零额外依赖支持 `openai`、`anthropic`、`google`、`openai-compatible` 与 `ollama` 协议，提供密钥掩码与连接测试。
-- 按能力将工具拆分为 `planner`、`image_creator`、`video_creator`、`audio_creator` 分组智能体，支持跨能力自动交接（Handoff）与 `<canvas_scene_context>` 画布场景实时感知。
+- 按能力将工具拆分为 `planner`、`image_creator`、`video_creator`、`audio_creator` 分组智能体，支持跨能力自动交接（Handoff）、`<canvas_scene_context>`（含 `callout-badge` 方位识别）实时感知、原生画布排版工具集（`canvas_plan_storyboard` / `canvas_arrange_elements` / `canvas_connect_and_badge`）与长会话上下文自动折叠。
+
+### 2.4 分钟级长片生产、异构算力守护与精装归档（阶段 P4–P8）
+- 内置 `server/bin/ffmpeg` 与 `ffprobe`，无需外部系统环境变量即可完成多镜裁剪拼接、48kHz 原生立体声串联、配乐循环与侧链人声自动闪避（`sidechaincompress`）、EBU R128 响度均衡、硬烧录描边字幕及片头片尾淡入淡出。
+- 支持视频首尾帧/关键帧提取接力（`extract_video_frame`）、涂抹遮罩合成红框视觉引导图（`prepare_visual_mask_guide`）、多源旁白语音合成（含本机离线中文语音兜底）与视频音轨剥离。
+- 支持按远端内存自动计算安全切片秒数的 `SeedVR2` 分块断点续跑超分（`video_upscale_chunked`）、显卡架构防呆拦截（如拦截 Tesla T4 运行 `NVFP4` 重模型并在双实例下自动实现 L4 出片 + T4 并行超分）、Colab 隧道一键热换址、云盘双向文件映射表、孤立切片二次确认清理、画布离线完整性巡检及 `.zip` 制片工程包归档导出。
 
 ## 3. 安全与非功能约束
 

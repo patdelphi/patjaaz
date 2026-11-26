@@ -1,8 +1,9 @@
 ﻿# Jaaz 变更记录（Changelog）
 
-## 2026-11-26 — 阶段 P5–P7 长片闭环、异构分流、17 套工作流全量纳管、遮罩引导重绘与导演时间轴
+## 2026-11-26 — 阶段 P5–P8 分钟级长片闭环、异构分流、17 套工作流纳管、导演时间轴与自动拆镜闪避混音
 
 ### 新增（Added）
+- **一键剧本拆镜铺板、配乐侧链闪避与画布健康巡检（P8-1 ~ P8-4）**：新增 `storyboard_planner_service.py`、系统工具 `canvas_plan_storyboard` 与 `/api/studio/plan_storyboard`（自动识别引号台词并原子生成设定框、分镜泳道、脚本卡、块箭头与序号角标）；升级 `video_finishing_service.py` 支持背景音乐 `aloop` 无缝循环与 `sidechaincompress` 人声侧链自动闪避混音；新增 `canvas_health_service.py` 与 `GET /api/studio/canvas_health/{canvas_id}` 巡检画布离线媒体完整性并全面同步 `Docs/00~12` 文档。
 - **云盘剩余 5 套工作流校准入库（P7-1）**：将 `text2image_MOSS`、`ImageEdit_MOSS`、`image_multiref_moss`、`ref2video_quad_minimax_h3_ref2va`、`ref2video_dual_minimax_h3_r2v` 校准连线与步数后标准化写入 `workflows/`（全仓库共 17 套成对工作流包），同步更新 `Docs/12-ComfyUI工作流完整使用说明.md`。
 - **画布涂抹遮罩视觉引导重绘闭环（P7-2）**：新增 `visual_mask_guide_service.py`、`prepare_visual_mask_guide` 系统工具与 `POST /api/studio/prepare_mask_guide`，前端画笔涂抹提交时自动叠绘半透明红框引导图（`<Picture 2>`）配合原图（`<Picture 1>`）对接无遮罩槽大模型精准局部重绘。
 - **导演分镜时间轴与前端按需懒加载（P7-3 / P7-4）**：新增 `StudioDirectorTimeline.tsx` 支持镜头上下排序、单镜起止秒裁剪、逐镜台词自动换算硬烧录时间轴、一键抽尾帧接力与分块超分；对 `CanvasExcali`、工作台抽屉与仅开发环境加载的 `RouterDevtools` 实施 `React.lazy` 拆分并细化 `manualChunks`。

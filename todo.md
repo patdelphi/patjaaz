@@ -440,3 +440,13 @@
 2. [x] **P7-2 画布涂抹遮罩视觉引导重绘闭环**：新增 `visual_mask_guide_service.py`、`prepare_visual_mask_guide` 工具与 `/api/studio/prepare_mask_guide`，前端涂抹遮罩自动合成半透明红框引导图（`<Picture 2>`）对接 `SenseNova U1.6` / `MiniMax H3` 局部修改。
 3. [x] **P7-3 工作台「导演分镜时间轴」可视化编排面板**：新增 `StudioDirectorTimeline.tsx`，支持镜头上下调序、单镜起止秒裁剪、逐镜台词字幕自动换算烧录时间轴、单镜一键抽尾帧接力与一键分块超分。
 4. [x] **P7-4 前端路由与重型依赖按需懒加载减重**：按需懒加载 `CanvasExcali`、工作台抽屉与仅开发环境加载的 `RouterDevtools`，拆分 `markdown-vendor` 与 `math-vendor`。
+
+---
+
+## 阶段 P8：一键剧本拆镜铺板、配乐自动闪避混音与画布资产健康巡检（2026-11-26 已完成）
+
+### 范围与阶段
+1. [x] **P8-1 一键剧本拆镜与故事板自动铺排**：新增 `storyboard_planner_service.py`、系统工具 `canvas_plan_storyboard` 与 `/api/studio/plan_storyboard`，将多行大纲或分镜列表原子铺排为角色设定框、水平分镜泳道、绑定脚本卡、闭合块箭头与递增序号角标，并在工作台提供一键拆镜铺板入口。
+2. [x] **P8-2 背景配乐循环铺底与人声自动闪避混音（Audio Ducking）**：升级 `video_finishing_service.py` 与 `video_compose_service.py` 支持 `bgm_audio` 自动循环截齐与 `sidechaincompress` 侧链动态闪避，同步接入 `video_edit_and_stitch` 与导演时间轴面板。
+3. [x] **P8-3 画布媒体离线完整性巡检**：新增 `canvas_health_service.py` 与 `GET /api/studio/canvas_health/{canvas_id}`，核验画布全部图像/视频/音频本地文件落盘状态、血缘记录与云盘映射覆盖率，并在工作台展示巡检结果。
+4. [x] **P8-4 工程文档体系全面收口**：同步更新 `Docs/00-文档索引.md`、`Docs/08-requirements.md`、`Docs/09-api.md`、`Docs/10-deployment.md`、`Docs/11-changelog.md`，全量 141 项后端单测与 78 项前端单测全部通过。

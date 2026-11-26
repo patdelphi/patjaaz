@@ -85,7 +85,11 @@ class AgentManager:
                 business_tools.append(tool)
                 seen_tool_ids.add(tid)
 
-        for sys_canvas_tid in ('canvas_arrange_elements', 'canvas_connect_and_badge'):
+        for sys_canvas_tid in (
+            'canvas_arrange_elements',
+            'canvas_connect_and_badge',
+            'canvas_plan_storyboard',
+        ):
             if sys_canvas_tid not in seen_tool_ids:
                 sys_tool = tool_service.get_tool(sys_canvas_tid)
                 if sys_tool:

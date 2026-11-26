@@ -58,7 +58,19 @@ class VideoEditAndStitchInput(BaseModel):
     )
     narration_audio: Optional[str] = Field(
         default=None,
-        description="可选。叠加混音的全片旁白或背景音乐文件名。",
+        description="可选。叠加混音的全片旁白语音文件名。",
+    )
+    bgm_audio: Optional[str] = Field(
+        default=None,
+        description="可选。全片背景音乐文件名（过短时自动无缝循环，默认启用人声自动闪避）。",
+    )
+    bgm_volume: float = Field(
+        default=0.28,
+        description="可选。背景音乐基础音量系数（默认 0.28）。",
+    )
+    enable_audio_ducking: bool = Field(
+        default=True,
+        description="可选。是否开启人声/对白出现时背景配乐自动压低闪避（sidechaincompress，默认 true）。",
     )
     subtitles: Optional[List[SubtitleLineSpec]] = Field(
         default=None,
@@ -107,6 +119,9 @@ async def video_edit_and_stitch_tool(
     transition_fade_sec: float = 0.2,
     preserve_clip_audio: bool = True,
     narration_audio: Optional[str] = None,
+    bgm_audio: Optional[str] = None,
+    bgm_volume: float = 0.28,
+    enable_audio_ducking: bool = True,
     subtitles: Optional[List[SubtitleLineSpec]] = None,
     burn_subtitles: bool = False,
     normalize_audio_loudness: bool = False,
@@ -140,6 +155,9 @@ async def video_edit_and_stitch_tool(
             target_width=target_width,
             target_height=target_height,
             narration_audio=narration_audio,
+            bgm_audio=bgm_audio,
+            bgm_volume=bgm_volume,
+            enable_audio_ducking=enable_audio_ducking,
             subtitles=subs_dicts,
             normalize_audio_loudness=normalize_audio_loudness,
             burn_subtitles=burn_subtitles,

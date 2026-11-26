@@ -84,15 +84,44 @@ def build_post_concat_finishing_filters(
     a_in_label: Optional[str],
     *,
     total_duration_sec: float,
+    bgm_input_idx: Optional[int] = None,
+    bgm_volume: float = 0.28,
+    enable_audio_ducking: bool = True,
     burn_srt_path: Optional[str] = None,
     intro_title: Optional[str] = None,
     fade_out_outro_sec: float = 0.0,
     normalize_audio_loudness: bool = False,
 ) -> Tuple[List[str], str, Optional[str]]:
-    """在 concat 输出标签之后追加字幕硬烧录、片头标题渐显、片尾淡出与 EBU R128 响度均衡滤镜链。"""
+    """在 concat 输出标签之后追加配乐循环闪避混音、字幕硬烧录、片头标题渐显、片尾淡出与 EBU R128 响度均衡滤镜链。"""
     clauses: List[str] = []
     v_ops: List[str] = []
     a_ops: List[str] = []
+    cur_a_label = a_in_label
+
+    if bgm_input_idx is not None:
+        dur_clamp = max(0.5, float(total_duration_sec or 5.0))
+        vol_clamp = max(0.02, min(1.5, float(bgm_volume or 0.28)))
+        clauses.append(
+            f"[{bgm_input_idx}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"aloop=loop=-1:size=2000000000,atrim=0:{dur_clamp:.3f},asetpts=PTS-STARTPTS,"
+            f"volume={vol_clamp:.2f}[abgm_raw]"
+        )
+        if cur_a_label:
+            if enable_audio_ducking:
+                clauses.append(f"{cur_a_label}asplit=2[afg_main][afg_sc]")
+                clauses.append(
+                    "[abgm_raw][afg_sc]sidechaincompress=threshold=0.025:ratio=6:attack=30:release=450[abgm_duck]"
+                )
+                clauses.append(
+                    "[afg_main][abgm_duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[amixed]"
+                )
+            else:
+                clauses.append(
+                    f"{cur_a_label}[abgm_raw]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[amixed]"
+                )
+            cur_a_label = "[amixed]"
+        else:
+            cur_a_label = "[abgm_raw]"
 
     title_clean = str(intro_title or "").strip()
     if title_clean:
@@ -123,10 +152,10 @@ def build_post_concat_finishing_filters(
     if outro_d > 0.0 and total_duration_sec > outro_d + 0.25:
         out_st = max(0.0, total_duration_sec - outro_d)
         v_ops.append(f"fade=t=out:st={out_st:.3f}:d={outro_d:.3f}")
-        if a_in_label:
+        if cur_a_label:
             a_ops.append(f"afade=t=out:st={out_st:.3f}:d={outro_d:.3f}")
 
-    if a_in_label and normalize_audio_loudness:
+    if cur_a_label and normalize_audio_loudness:
         # EBU R128 流媒体标准响度目标（-16 LUFS，真峰值上限 -1.5 dBTP）
         a_ops.append("loudnorm=I=-16:TP=-1.5:LRA=11")
 
@@ -135,9 +164,9 @@ def build_post_concat_finishing_filters(
         final_v = "[vfin]"
         clauses.append(f"{v_in_label}{','.join(v_ops)}{final_v}")
 
-    final_a = a_in_label
-    if a_in_label and a_ops:
+    final_a = cur_a_label
+    if cur_a_label and a_ops:
         final_a = "[afin]"
-        clauses.append(f"{a_in_label}{','.join(a_ops)}{final_a}")
+        clauses.append(f"{cur_a_label}{','.join(a_ops)}{final_a}")
 
     return clauses, final_v, final_a

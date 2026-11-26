@@ -50,8 +50,9 @@
 | --- | --- | --- |
 | `GET` | `/api/studio/assets` | 跨全量画布按关键词与类型（图像/视频/音频）检索历史生成资产 |
 | `GET / POST` | `/api/studio/templates` | 读取内置分镜模板与保存用户自定义参数化提示词模板 |
+| `POST` | `/api/studio/plan_storyboard` | 将多行剧本或分镜列表原子铺排为角色设定框、水平分镜泳道、脚本卡、块箭头与递增角标 |
 | `POST` | `/api/studio/batch_expand` | 解析 CSV/TSV 或单列变量文本并展开批量提示词 |
-| `POST` | `/api/studio/compose_video` | 调用内置 `ffmpeg` 执行多段分镜裁剪、转场、响度均衡（`loudnorm`）、硬烧录字幕与片头片尾精装合片 |
+| `POST` | `/api/studio/compose_video` | 调用内置 `ffmpeg` 执行多段裁剪、转场、背景配乐侧链闪避（`bgm_audio`）、响度均衡、硬烧录字幕与片头片尾精装合片 |
 | `POST` | `/api/studio/tts` | 多源语音合成（OpenAI / DashScope `qwen-tts` / 本机离线中文语音兜底）并写入画布音频卡 |
 | `POST` | `/api/studio/extract_audio` | 从指定视频剥离 48kHz 立体声 MP3 音频卡片并写入画布 |
 | `POST` | `/api/studio/extract_frame` | 提取视频首帧、尾帧或指定秒数关键帧 PNG 并写入画布血缘供长片接力 |
@@ -62,6 +63,7 @@
 | `GET` | `/api/studio/file_mappings` | 查询（`?refresh=true` 增量扫描补全）本地短 ID 文件与 `H:` 云盘双向映射表 |
 | `GET` | `/api/studio/orphan_files` | 只读扫描未绑定任何画布或未完成超分任务的孤立临时切片与媒体文件 |
 | `POST` | `/api/studio/cleanup_orphans` | 在显式传入 `confirm: true` 且二次核验零画布引用后安全清理已勾选孤立文件 |
+| `GET` | `/api/studio/canvas_health/{canvas_id}` | 巡检指定画布全部媒体元素的本地文件存在性、血缘覆盖与云盘备份状态 |
 | `GET` | `/api/studio/export_bundle/{canvas_id}` | 将画布 JSON、制片血缘单、云盘映射 CSV、字幕草稿及关联媒体一键打包为 `.zip` 下载 |
 
 ## 6. Socket.IO `session_update` 核心事件

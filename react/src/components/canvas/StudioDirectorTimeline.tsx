@@ -26,6 +26,7 @@ type TimelineShot = {
 type StudioDirectorTimelineProps = {
   canvasId: string
   canvasVideos: string[]
+  canvasAudios?: string[]
   onDone?: () => void
 }
 
@@ -42,12 +43,15 @@ function makeShot(file: string, defaultTrimEnd = '15.0'): TimelineShot {
 export const StudioDirectorTimeline: React.FC<StudioDirectorTimelineProps> = ({
   canvasId,
   canvasVideos,
+  canvasAudios = [],
   onDone,
 }) => {
   const [shots, setShots] = useState<TimelineShot[]>([])
   const [fadeSec, setFadeSec] = useState<string>('0.2')
   const [outroSec, setOutroSec] = useState<string>('0.6')
   const [introTitle, setIntroTitle] = useState<string>('')
+  const [bgmAudio, setBgmAudio] = useState<string>('')
+  const [audioDucking, setAudioDucking] = useState<boolean>(true)
   const [loudnorm, setLoudnorm] = useState<boolean>(true)
   const [burnSubtitles, setBurnSubtitles] = useState<boolean>(true)
   const [busyAction, setBusyAction] = useState<string>('')
@@ -195,6 +199,8 @@ export const StudioDirectorTimeline: React.FC<StudioDirectorTimelineProps> = ({
           transition_fade_sec:
             Number.isFinite(fadeVal) && fadeVal >= 0 ? fadeVal : 0.2,
           preserve_clip_audio: true,
+          bgm_audio: bgmAudio || null,
+          enable_audio_ducking: audioDucking,
           normalize_audio_loudness: loudnorm,
           burn_subtitles: burnSubtitles && subtitles.length > 0,
           subtitles: subtitles.length > 0 ? subtitles : null,
@@ -420,6 +426,31 @@ export const StudioDirectorTimeline: React.FC<StudioDirectorTimelineProps> = ({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+        {canvasAudios.length > 0 && (
+          <select
+            value={bgmAudio}
+            aria-label="选择背景配乐"
+            onChange={(e) => setBgmAudio(e.target.value)}
+            className="h-6 rounded border bg-background px-1.5 text-[11px] text-foreground"
+          >
+            <option value="">不叠加背景音乐</option>
+            {canvasAudios.map((af) => (
+              <option key={af} value={af}>
+                配乐：{af}
+              </option>
+            ))}
+          </select>
+        )}
+        {bgmAudio && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={audioDucking}
+              onChange={(e) => setAudioDucking(e.target.checked)}
+            />
+            <span>人声自动闪避配乐</span>
+          </label>
+        )}
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
             type="checkbox"

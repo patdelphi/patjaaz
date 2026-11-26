@@ -19,6 +19,7 @@ from tools.long_video_tools import (
     extract_video_frame_tool,
     video_upscale_chunked_tool,
 )
+from tools.storyboard_tools import canvas_plan_storyboard_tool
 from tools.video_edit_tools import video_edit_and_stitch_tool
 from tools.visual_mask_tools import prepare_visual_mask_guide_tool
 from tools.write_plan import write_plan_tool
@@ -51,6 +52,10 @@ class ToolService:
             self.tools["canvas_connect_and_badge"] = {
                 "provider": "system",
                 "tool_function": canvas_connect_and_badge_tool,
+            }
+            self.tools["canvas_plan_storyboard"] = {
+                "provider": "system",
+                "tool_function": canvas_plan_storyboard_tool,
             }
             self.tools["video_edit_and_stitch"] = {
                 "provider": "system",

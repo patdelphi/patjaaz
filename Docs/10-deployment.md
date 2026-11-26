@@ -5,7 +5,8 @@
 - 操作系统：Windows 10/11、macOS 或 Linux
 - Node.js：20 LTS 及以上
 - Python：3.12 或 3.13（服务端位于 `server/.venv`）
-- 可选远端或本地 ComfyUI：建议 16GB–24GB 及以上显存，若通过反向代理或 Cloudflare Tunnel 暴露建议使用 HTTPS
+- 音视频引擎：项目内置 `server/bin/ffmpeg.exe` 与 `ffprobe.exe`（优先自动加载，无需配置操作系统 `PATH`；二进制体积 >100MB 已由 `.gitignore` 排除，新克隆环境放入 `server/bin/` 或安装系统 `ffmpeg` 即可）
+- 可选远端或本地 ComfyUI：重型 `NVFP4` 生成建议 Ampere+ 16GB–24GB+ 显存（如 L4 / A100 / RTX 3090+）；可额外挂载次级 T4 实例自动分流 `SeedVR2` 超分任务；Colab 重启换址后可在「资产与工作台 -> 云盘映射与清理」一键热更新隧道地址并断点续跑超分队列
 
 ## 2. 配置项（`.env` 与 `user_data`）
 

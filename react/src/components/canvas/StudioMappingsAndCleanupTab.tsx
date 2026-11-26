@@ -68,6 +68,7 @@ export const StudioMappingsAndCleanupTab: React.FC<
   const [selectedOrphans, setSelectedOrphans] = useState<string[]>([])
   const [scanningOrphans, setScanningOrphans] = useState(false)
   const [deletingOrphans, setDeletingOrphans] = useState(false)
+  const [healthText, setHealthText] = useState<string>('')
 
   const fetchMappings = async (refresh = false) => {
     setLoadingMappings(true)
@@ -170,6 +171,23 @@ export const StudioMappingsAndCleanupTab: React.FC<
       toast.error(err instanceof Error ? err.message : '断点续跑失败')
     } finally {
       setResumingJobId('')
+    }
+  }
+
+  const handleInspectCanvasHealth = async () => {
+    try {
+      const resp = await apiFetch(
+        `/api/studio/canvas_health/${encodeURIComponent(canvasId)}`
+      )
+      const body = await resp.json()
+      if (!resp.ok) throw new Error(body?.detail || `HTTP ${resp.status}`)
+      const statusPrefix = body.healthy ? '完整无缺' : `缺失 ${body.missing_count} 个`
+      setHealthText(
+        `当前画布巡检：${statusPrefix} · 本地就绪 ${body.present_count}/${body.total_media_elements} · 云盘已映射 ${body.drive_mapped_count} · 总计 ${formatBytes(body.total_media_bytes || 0)}`
+      )
+      toast.success('已完成当前画布媒体完整性巡检')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '巡检画布失败')
     }
   }
 
@@ -388,9 +406,17 @@ export const StudioMappingsAndCleanupTab: React.FC<
       <div className="rounded-lg border p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold">
-            未绑定画布的孤立临时切片扫描与清理
+            画布完整性巡检 & 孤立临时切片清理
           </span>
           <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => void handleInspectCanvasHealth()}
+            >
+              巡检当前画布
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -414,6 +440,11 @@ export const StudioMappingsAndCleanupTab: React.FC<
             )}
           </div>
         </div>
+        {healthText && (
+          <div className="rounded bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-700">
+            {healthText}
+          </div>
+        )}
 
         {orphans.length > 0 && (
           <div className="max-h-24 space-y-1 overflow-y-auto rounded border p-2">

@@ -59,4 +59,29 @@ describe('Stage P7 Timeline, Visual Mask Guide & Lazy Code-Splitting', () => {
     expect(canvasRouteSrc).toContain("lazy(() => import('@/components/canvas/CanvasExcali'))")
     expect(headerSrc).toContain("lazy(() => import('./CanvasStudioDrawer'))")
   })
+
+  it('wires Stage P8 storyboard auto-layout, audio ducking and canvas health check', () => {
+    const drawerSrc = fs.readFileSync(
+      path.join(repoRoot, 'react/src/components/canvas/CanvasStudioDrawer.tsx'),
+      'utf-8'
+    )
+    const timelineSrc = fs.readFileSync(
+      path.join(
+        repoRoot,
+        'react/src/components/canvas/StudioDirectorTimeline.tsx'
+      ),
+      'utf-8'
+    )
+    const cleanupSrc = fs.readFileSync(
+      path.join(
+        repoRoot,
+        'react/src/components/canvas/StudioMappingsAndCleanupTab.tsx'
+      ),
+      'utf-8'
+    )
+
+    expect(drawerSrc).toContain('/api/studio/plan_storyboard')
+    expect(timelineSrc).toContain('enable_audio_ducking')
+    expect(cleanupSrc).toContain('/api/studio/canvas_health/')
+  })
 })

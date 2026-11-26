@@ -57,6 +57,11 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
 
   const [newTplName, setNewTplName] = useState('')
   const [newTplPrompt, setNewTplPrompt] = useState('')
+  const [sbTitle, setSbTitle] = useState('江南夜雨·一盏江湖')
+  const [sbScript, setSbScript] = useState(
+    '青石雨巷，侠客撑油纸伞缓步走来，“今夜风急，且饮一盏热茶。”\n茶肆木窗内暖黄烛火摇曳，茶师执壶注水，白雾升腾\n侠客推门入座，斗笠滴落水珠，指尖轻触天青建盏\n雨歇云散，远山孤舟灯火渐远，檐角铜铃微响'
+  )
+  const [sbBusy, setSbBusy] = useState(false)
 
   const [batchTable, setBatchTable] = useState(
     '主体,场景,光影\n天青釉建盏,江南雨巷木窗,柔和雨天侧光\n螺钿五弦琵琶,敦煌烛火石窟,暖金烛光浅景深'
@@ -294,22 +299,60 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
     toast.success(`已在画布铺设 ${data.count} 张分镜卡并将批量指令填入对话`)
   }
 
-  const canvasVideos: string[] = (() => {
-    if (!excalidrawAPI) return []
+  const { canvasVideos, canvasAudios } = (() => {
+    if (!excalidrawAPI) return { canvasVideos: [] as string[], canvasAudios: [] as string[] }
     const files = excalidrawAPI.getFiles()
-    const out: string[] = []
+    const vids: string[] = []
+    const auds: string[] = []
     for (const el of excalidrawAPI.getSceneElements()) {
       if (el.isDeleted) continue
       const rawLink = 'link' in el && typeof el.link === 'string' ? el.link : ''
       const fid = 'fileId' in el && el.fileId ? String(el.fileId) : ''
       const durl = rawLink || (fid ? String(files[fid]?.dataURL || '') : '')
+      const fname = extractApiFilename(durl)
+      if (!fname) continue
       if (isVideoUrl(durl)) {
-        const fname = extractApiFilename(durl)
-        if (fname && !out.includes(fname)) out.push(fname)
+        if (!vids.includes(fname)) vids.push(fname)
+      } else if (/\.(mp3|wav|flac|m4a|aac|ogg)$/i.test(fname)) {
+        if (!auds.includes(fname)) auds.push(fname)
       }
     }
-    return out
+    return { canvasVideos: vids, canvasAudios: auds }
   })()
+
+  const handlePlanStoryboardToCanvas = async () => {
+    if (!sbScript.trim()) {
+      toast.info('请输入至少 1 行分镜脚本')
+      return
+    }
+    setSbBusy(true)
+    try {
+      const resp = await apiFetch('/api/studio/plan_storyboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          canvas_id: canvasId,
+          film_title: sbTitle.trim() || '短片分镜企划',
+          raw_script: sbScript,
+          shot_duration_sec: 15.0,
+        }),
+      })
+      const body = await resp.json()
+      if (!resp.ok) throw new Error(body?.detail || `HTTP ${resp.status}`)
+      eventBus.emit('Canvas::SyncGeneratedImages', { canvasId })
+      if (body.relay_instruction) {
+        eventBus.emit('Canvas::AddTextToChat', [body.relay_instruction])
+      }
+      toast.success(
+        `已自动铺排 ${body.shot_count} 镜故事板（共 ${body.total_duration_sec}s）`
+      )
+      dialogRef.current?.close()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '剧本拆镜铺板失败')
+    } finally {
+      setSbBusy(false)
+    }
+  }
 
   const handleExportProjectBundle = async () => {
     setBundleBusy(true)
@@ -587,6 +630,32 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
                   保存模板
                 </Button>
               </div>
+
+              <div className="rounded-lg border bg-blue-500/5 p-3 space-y-2 text-xs">
+                <div className="font-medium">剧本大纲一键拆镜铺板（自动生成设定框 + 分镜泳道 + 块箭头 + 对白提取）</div>
+                <input
+                  type="text"
+                  value={sbTitle}
+                  onChange={(e) => setSbTitle(e.target.value)}
+                  placeholder="短片标题"
+                  className="h-7 w-full rounded border bg-background px-2.5"
+                />
+                <textarea
+                  rows={3}
+                  value={sbScript}
+                  onChange={(e) => setSbScript(e.target.value)}
+                  placeholder="每行一镜，引号内自动识别为角色台词字幕…"
+                  className="w-full rounded border bg-background p-2 font-mono text-[11px]"
+                />
+                <Button
+                  size="sm"
+                  disabled={sbBusy}
+                  className="h-7 text-xs"
+                  onClick={() => void handlePlanStoryboardToCanvas()}
+                >
+                  {sbBusy ? '铺排故事板中…' : '一键拆镜铺入当前画布并填入接力指令'}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -625,6 +694,7 @@ export const CanvasStudioDrawer: React.FC<CanvasStudioDrawerProps> = ({
               <StudioDirectorTimeline
                 canvasId={canvasId}
                 canvasVideos={canvasVideos}
+                canvasAudios={canvasAudios}
                 onDone={() => dialogRef.current?.close()}
               />
             </div>

@@ -159,16 +159,7 @@ def probe_video_clip_info(file_path: str, ffmpeg_bin: Optional[str] = None) -> D
     if ffprobe_bin:
         try:
             proc = subprocess.run(
-                [
-                    ffprobe_bin,
-                    "-v",
-                    "quiet",
-                    "-print_format",
-                    "json",
-                    "-show_format",
-                    "-show_streams",
-                    file_path,
-                ],
+                [ffprobe_bin, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", file_path],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -222,6 +213,9 @@ def build_ffmpeg_compose_command(
     output_path: str,
     *,
     narration_path: Optional[str] = None,
+    bgm_path: Optional[str] = None,
+    bgm_volume: float = 0.28,
+    enable_audio_ducking: bool = True,
     srt_path: Optional[str] = None,
     target_width: int = 1344,
     target_height: int = 768,
@@ -234,7 +228,7 @@ def build_ffmpeg_compose_command(
     intro_title: Optional[str] = None,
     fade_out_outro_sec: float = 0.0,
 ) -> List[str]:
-    """构建安全的参数数组形式 ffmpeg 自动裁剪与拼接命令，支持立体声音轨、响度均衡、硬烧录字幕与片头片尾精装。"""
+    """构建安全的参数数组形式 ffmpeg 自动裁剪与拼接命令，支持立体声音轨、配乐闪避、响度均衡、硬烧录字幕与片头片尾精装。"""
     if not clip_paths:
         raise ValueError("clip_paths cannot be empty")
 
@@ -252,9 +246,14 @@ def build_ffmpeg_compose_command(
         narration_idx = len(clip_paths)
         cmd.extend(["-i", narration_path])
 
+    bgm_idx: Optional[int] = None
+    if bgm_path:
+        bgm_idx = len(clip_paths) + (1 if narration_path else 0)
+        cmd.extend(["-i", bgm_path])
+
     srt_idx: Optional[int] = None
     if srt_path and not burn_subtitles:
-        srt_idx = len(clip_paths) + (1 if narration_path else 0)
+        srt_idx = len(clip_paths) + (1 if narration_path else 0) + (1 if bgm_path else 0)
         cmd.extend(["-i", srt_path])
 
     scale_pad = (
@@ -330,6 +329,9 @@ def build_ffmpeg_compose_command(
             "[vout]",
             "[aout]",
             total_duration_sec=total_eff_dur,
+            bgm_input_idx=bgm_idx,
+            bgm_volume=bgm_volume,
+            enable_audio_ducking=enable_audio_ducking,
             burn_srt_path=srt_path if burn_subtitles else None,
             intro_title=intro_title,
             fade_out_outro_sec=fade_out_outro_sec,
@@ -340,19 +342,24 @@ def build_ffmpeg_compose_command(
     else:
         v_inputs = "".join(f"[v{i}]" for i in range(len(clip_paths)))
         filter_parts.append(f"{v_inputs}concat=n={len(clip_paths)}:v=1:a=0[vout]")
-        extra_clauses, v_map, _ = build_post_concat_finishing_filters(
+        extra_clauses, v_map, a_only_map = build_post_concat_finishing_filters(
             "[vout]",
             None,
             total_duration_sec=total_eff_dur,
+            bgm_input_idx=bgm_idx if narration_idx is None else None,
+            bgm_volume=bgm_volume,
+            enable_audio_ducking=False,
             burn_srt_path=srt_path if burn_subtitles else None,
             intro_title=intro_title,
             fade_out_outro_sec=fade_out_outro_sec,
-            normalize_audio_loudness=False,
+            normalize_audio_loudness=normalize_audio_loudness,
         )
         filter_parts.extend(extra_clauses)
         cmd.extend(["-filter_complex", ";".join(filter_parts), "-map", v_map])
         if narration_idx is not None:
             cmd.extend(["-map", f"{narration_idx}:a:0", "-c:a", "aac", "-shortest"])
+        elif a_only_map:
+            cmd.extend(["-map", a_only_map, "-c:a", "aac", "-b:a", "192k"])
         elif len(clip_paths) == 1:
             cmd.extend(["-map", "0:a?", "-c:a", "aac"])
 
@@ -381,6 +388,9 @@ async def compose_storyboard_clips(
     target_width: int = 0,
     target_height: int = 0,
     narration_audio: Optional[str] = None,
+    bgm_audio: Optional[str] = None,
+    bgm_volume: float = 0.28,
+    enable_audio_ducking: bool = True,
     subtitles: Optional[List[Dict[str, Any]]] = None,
     normalize_audio_loudness: bool = False,
     burn_subtitles: bool = False,
@@ -394,26 +404,17 @@ async def compose_storyboard_clips(
     active_files_dir = files_dir or FILES_DIR
     normalized_edits: List[Dict[str, Any]] = []
     if clip_edits:
-        for item in clip_edits:
-            if isinstance(item, dict) and str(item.get("file") or "").strip():
-                normalized_edits.append(
-                    {
-                        "file": _clean_media_ref(str(item["file"])),
-                        "trim_start": item.get("trim_start"),
-                        "trim_end": item.get("trim_end"),
-                    }
-                )
+        normalized_edits = [
+            {"file": _clean_media_ref(str(it["file"])), "trim_start": it.get("trim_start"), "trim_end": it.get("trim_end")}
+            for it in clip_edits
+            if isinstance(it, dict) and str(it.get("file") or "").strip()
+        ]
     if not normalized_edits and video_files:
-        for vf in video_files:
-            if str(vf or "").strip():
-                normalized_edits.append(
-                    {
-                        "file": _clean_media_ref(str(vf)),
-                        "trim_start": None,
-                        "trim_end": None,
-                    }
-                )
-
+        normalized_edits = [
+            {"file": _clean_media_ref(str(vf)), "trim_start": None, "trim_end": None}
+            for vf in video_files
+            if str(vf or "").strip()
+        ]
     if not normalized_edits:
         raise ValueError("至少需要提供 1 个待剪辑拼接的视频文件名")
 
@@ -429,6 +430,12 @@ async def compose_storyboard_clips(
         resolved_narration = safe_file_id_path(active_files_dir, _clean_media_ref(narration_audio))
         if not os.path.isfile(resolved_narration):
             raise FileNotFoundError(f"配音文件不存在: {os.path.basename(resolved_narration)}")
+
+    resolved_bgm: Optional[str] = None
+    if bgm_audio and bgm_audio.strip():
+        resolved_bgm = safe_file_id_path(active_files_dir, _clean_media_ref(bgm_audio))
+        if not os.path.isfile(resolved_bgm):
+            raise FileNotFoundError(f"背景音乐文件不存在: {os.path.basename(resolved_bgm)}")
 
     ffmpeg_bin = resolve_ffmpeg_binary()
 
@@ -482,6 +489,9 @@ async def compose_storyboard_clips(
             resolved_clips,
             out_path,
             narration_path=resolved_narration,
+            bgm_path=resolved_bgm,
+            bgm_volume=bgm_volume,
+            enable_audio_ducking=enable_audio_ducking,
             srt_path=srt_temp_path,
             target_width=out_w,
             target_height=out_h,

@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel
 
 from routers.studio_p5_routes import router as studio_p5_router
+from routers.studio_p8_routes import router as studio_p8_router
 from services.config_service import FILES_DIR, USER_DATA_DIR, config_service
 from services.db_service import db_service
 from services.file_mapping_service import backfill_historical_mappings, list_file_mappings
@@ -151,6 +152,9 @@ class ComposeVideoRequest(BaseModel):
     target_width: int = 0
     target_height: int = 0
     narration_audio: Optional[str] = None
+    bgm_audio: Optional[str] = None
+    bgm_volume: float = 0.28
+    enable_audio_ducking: bool = True
     subtitles: Optional[List[Dict[str, Any]]] = None
     normalize_audio_loudness: bool = False
     burn_subtitles: bool = False
@@ -316,6 +320,9 @@ async def compose_video_endpoint(req: ComposeVideoRequest):
             target_width=req.target_width,
             target_height=req.target_height,
             narration_audio=req.narration_audio,
+            bgm_audio=req.bgm_audio,
+            bgm_volume=req.bgm_volume,
+            enable_audio_ducking=req.enable_audio_ducking,
             subtitles=req.subtitles,
             normalize_audio_loudness=req.normalize_audio_loudness,
             burn_subtitles=req.burn_subtitles,
@@ -368,3 +375,4 @@ async def get_file_mappings_endpoint(refresh: bool = False):
 
 
 router.include_router(studio_p5_router)
+router.include_router(studio_p8_router)
